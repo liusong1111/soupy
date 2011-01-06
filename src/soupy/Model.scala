@@ -7,14 +7,22 @@ import java.beans.PropertyDescriptor
 
 class Dao[T](val modelClass: Class[T], val tableName: String) {
   def all: ListBuffer[T] = {
-    val q = new Query()
+    q.fetch
+  }
 
-    q.from(tableName).query(modelClass)
+  def q = {
+    val q = new Query(tableName, modelClass)
+
+    q
+  }
+
+  def insert(m: T): Boolean = {
+    q.insert(m)
   }
 }
 
-class Query {
-  var _from: String = _
+class Query[T](var tableName: String = "", var modelClass: Class[T] = null) {
+  var _from: String = tableName
   var _where = ListBuffer[String]()
 
   def where(pairs: Pair[String, Any]*) = {
@@ -47,36 +55,100 @@ class Query {
     sql.toString
   }
 
-  def execute(callback: ResultSet => Unit): Unit = {
-    Class.forName("com.mysql.jdbc.Driver").newInstance
-    val conn = DriverManager.getConnection("jdbc:mysql:///" + soupy.db("database"),
-      soupy.db("user"), soupy.db("password"))
-    var st: PreparedStatement = null
-    var rs: ResultSet = null
-    try {
-      val sql = toSQL
-      st = conn.prepareStatement(sql)
-      rs = st.executeQuery
-      while (rs.next) {
-        callback(rs)
-      }
+  def executeQuery(callback: ResultSet => Unit): Unit = {
+    usingConnection {
+      conn =>
+        var st: PreparedStatement = null
+        var rs: ResultSet = null
+        try {
+          val sql = toSQL
+          st = conn.prepareStatement(sql)
+          rs = st.executeQuery
+          while (rs.next) {
+            callback(rs)
+          }
 
-    } finally {
-      rs.close
-      st.close
-      conn.close
+        } finally {
+          try {
+            rs.close
+          } catch {
+            case _ => None
+          }
+          try {
+            st.close
+          } catch {
+            case _ => None
+          }
+        }
     }
   }
 
-  def query[T](modelClass: Class[T]): ListBuffer[T] = {
+  def insert(m: T): Boolean = {
+    var result = false
+    val propertyDescriptors = Introspector.getBeanInfo(modelClass).getPropertyDescriptors
+    val fNames = ListBuffer[String]()
+    val values = ListBuffer[Object]()
+    propertyDescriptors.filter{ prop =>
+      prop.getName != "class"
+    }.foreach {
+      prop =>
+        fNames += prop.getName
+        values += prop.getReadMethod.invoke(m)
+    }
+
+    val sFields = fNames.mkString(",")
+    val sHolders = (1 to (fNames.length)).map{i => "?"}.mkString(",")
+    val sql = "insert into %s(%s) values(%s)".format(_from, sFields, sHolders)
+//    println(sql)
+    usingConnection {
+      conn =>
+        var st: PreparedStatement = null
+        try {
+          st = conn.prepareStatement(sql)
+          values.zipWithIndex.foreach {
+            zip =>
+              val (value, i) = zip
+              st.setObject(i + 1, value)
+          }
+
+          result = st.executeUpdate == 0
+        } finally {
+          try {
+            st.close
+          } catch {
+            case _ => None
+          }
+        }
+    }
+
+    result
+  }
+
+  def fetch: ListBuffer[T] = {
     val result = ListBuffer[T]()
-    execute {
+    executeQuery {
       rs =>
         val m = ModelConverter.resultSetToModel(rs, modelClass)
         result += m
     }
 
     result
+  }
+
+  protected
+  def usingConnection(callback: Connection => Unit) {
+    Class.forName("com.mysql.jdbc.Driver").newInstance
+    val conn = DriverManager.getConnection("jdbc:mysql:///" + soupy.db("database"),
+      soupy.db("user"), soupy.db("password"))
+    try {
+      callback(conn)
+    } finally {
+      try {
+        conn.close
+      } catch {
+        case _ => None
+      }
+    }
   }
 }
 

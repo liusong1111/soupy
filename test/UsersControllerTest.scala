@@ -1,15 +1,9 @@
 import controllers._
-import reflect.BeanProperty
+import models._
 import soupy.Query
 import soupy.Dao
 
-class User{
-  @BeanProperty
-  var name:String = _
 
-  @BeanProperty
-  var age:Int = _
-}
 
 object UsersControllerTest{
   def main(args: Array[String]) {
@@ -20,10 +14,24 @@ object UsersControllerTest{
 
     //create table users(id bigint primary key auto_increment, name varchar(20), age integer);
     //insert into users(name, age) values('liusong', 32);
-    object UserDao extends Dao(classOf[User], "users")
-    val users = UserDao.all
-    users.foreach{user =>
-      println(user.name + "-" + user.age)
+    //insert into users(name, age) values('xiaoqiang', 21);
+    object UserDao extends Dao(classOf[User], "users"){
+      def byName(name:String)={
+        q.where("name" -> "liusong")
+      }
     }
+    println("--all--")
+    UserDao.all.foreach{user =>
+      println(user.name + "^" + user.age)
+    }
+    println("--byName--")
+    UserDao.byName("liusong").fetch.foreach(user =>
+      println(user.name + "^" + user.age)
+    )
+    println("--Add one--")
+    val user = new User()
+    user.name = "xyz"
+    user.age = 12
+    UserDao.insert(user)
   }
 }
