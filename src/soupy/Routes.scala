@@ -28,11 +28,9 @@ class RouteSet{
   }
 
   def recognize(uri:String, method:String):Option[Route]={
-    routes.find{route =>
-      route match{
+    routes.find{
         case Route(_uri, _method, _) if(_uri == uri && _method == method) => true
         case _ => false
-      }
     }
   }
 }
