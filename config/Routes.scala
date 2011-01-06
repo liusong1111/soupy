@@ -1,5 +1,8 @@
+package demo
+
+import controllers.UsersController
 import soupy.Routes
 
-object Routes extends Routes{
-  get("/users", Map("controller" -> "Users", "action" -> "index"))
+object MyRoutes extends Routes{
+  get("/users", Map("controller" -> UsersController, "action" -> "index"))
 }
