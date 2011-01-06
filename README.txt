@@ -26,5 +26,8 @@ only chunks of code in mass.
   Q: Why name as soupy?
   A: Thanks to jsoup library used in my first version.
   Q: Why no rack style layer,no framework-agnostic,no micro-core and plugin architecture, no CoC enough,...
-  A: We are young enough, and we are not that clear. Expect your suggestion.
+  A: We are young, and we are not that clear. Expect your suggestion.
+
+== Usage
+  ooooooooops, see source code.
 

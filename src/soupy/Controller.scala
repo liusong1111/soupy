@@ -6,23 +6,20 @@ import org.jsoup.Jsoup
 
 class Controller {
   def render(view: View, options: Map[String, Any]) {
-    var body = view.toString
-
-    println("body^^^^")
-    println(body)
-    println("^^^end body")
-
+    var result = view
     if (options.contains("layout")) {
-      val layout = options("layout")
-      val f = new File(soupy.root + "\\app\\views" + "\\users\\" + layout + ".html")
-      val doc = Jsoup.parse(f, "UTF-8")
-
-      doc.select(".yield").html(body)
-      body = doc.toString
+      val layout = options("layout").asInstanceOf[String]
+//      val f = new File(soupy.root + "/app/views" + layout + ".html")
+//      val doc = Jsoup.parse(f, "UTF-8")
+      val layoutView = new LayoutView(layout)
+      layoutView.setPart(view)
+//      doc.select(".yield").html(body)
+//      body = doc.toString
+      result = layoutView
     }
 
-    println(body)
-    body
-
+    println(result)
+    result
   }
+
 }

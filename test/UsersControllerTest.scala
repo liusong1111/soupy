@@ -1,7 +1,8 @@
-import controllers.UsersController
+import controllers._
 
 object UsersControllerTest{
   def main(args: Array[String]) {
-    (new UsersController).index
+    UsersController.index
+//    new IndexAction().process
   }
 }
