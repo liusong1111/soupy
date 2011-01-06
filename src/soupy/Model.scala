@@ -19,11 +19,29 @@ class Dao[T](val modelClass: Class[T], val tableName: String) {
   def insert(m: T): Boolean = {
     q.insert(m)
   }
+
+  def count: Int = {
+    q.count
+  }
 }
 
-class Query[T](var tableName: String = "", var modelClass: Class[T] = null) {
+class Query[T](var tableName: String = "",
+               var modelClass: Class[T] = null) {
   var _from: String = tableName
   var _where = ListBuffer[String]()
+  var _select:String = null
+
+  def select(select: String) = {
+    _select = select
+
+    this
+  }
+
+  def from(table: String) = {
+    _from = table
+
+    this
+  }
 
   def where(pairs: Pair[String, Any]*) = {
     pairs.foreach {
@@ -40,19 +58,30 @@ class Query[T](var tableName: String = "", var modelClass: Class[T] = null) {
     this
   }
 
-  def from(table: String) = {
-    _from = table
-
-    this
-  }
-
   def toSQL = {
     var sql = new StringBuffer()
-    sql.append("select *  from %s".format(_from))
+    var select = if (_select eq null) {
+      "select *"
+    } else {
+      _select
+    }
+    sql.append(select).append(" ")
+
+    sql.append("from %s".format(_from))
     if (_where.length > 0) {
       sql.append(" where ").append(_where.mkString(" AND "))
     }
     sql.toString
+  }
+
+  def count = {
+    var result = 0
+    select("select count(1)").executeQuery {
+      rs =>
+        result = rs.getInt(1)
+    }
+
+    result
   }
 
   def executeQuery(callback: ResultSet => Unit): Unit = {
@@ -88,8 +117,9 @@ class Query[T](var tableName: String = "", var modelClass: Class[T] = null) {
     val propertyDescriptors = Introspector.getBeanInfo(modelClass).getPropertyDescriptors
     val fNames = ListBuffer[String]()
     val values = ListBuffer[Object]()
-    propertyDescriptors.filter{ prop =>
-      prop.getName != "class"
+    propertyDescriptors.filter {
+      prop =>
+        prop.getName != "class"
     }.foreach {
       prop =>
         fNames += prop.getName
@@ -97,9 +127,11 @@ class Query[T](var tableName: String = "", var modelClass: Class[T] = null) {
     }
 
     val sFields = fNames.mkString(",")
-    val sHolders = (1 to (fNames.length)).map{i => "?"}.mkString(",")
+    val sHolders = (1 to (fNames.length)).map {
+      i => "?"
+    }.mkString(",")
     val sql = "insert into %s(%s) values(%s)".format(_from, sFields, sHolders)
-//    println(sql)
+    //    println(sql)
     usingConnection {
       conn =>
         var st: PreparedStatement = null

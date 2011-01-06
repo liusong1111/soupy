@@ -15,23 +15,20 @@ object UsersControllerTest{
     //create table users(id bigint primary key auto_increment, name varchar(20), age integer);
     //insert into users(name, age) values('liusong', 32);
     //insert into users(name, age) values('xiaoqiang', 21);
-    object UserDao extends Dao(classOf[User], "users"){
-      def byName(name:String)={
-        q.where("name" -> "liusong")
-      }
-    }
     println("--all--")
-    UserDao.all.foreach{user =>
+    User.all.foreach{user =>
       println(user.name + "^" + user.age)
     }
     println("--byName--")
-    UserDao.byName("liusong").fetch.foreach(user =>
+    User.byName("liusong").fetch.foreach(user =>
       println(user.name + "^" + user.age)
     )
     println("--Add one--")
     val user = new User()
     user.name = "xyz"
     user.age = 12
-    UserDao.insert(user)
+    println("before count:" + User.count)
+    User.insert(user)
+    println("after count:" + User.count)
   }
 }
