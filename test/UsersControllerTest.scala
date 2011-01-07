@@ -7,6 +7,8 @@ import soupy.Dao
 
 object UsersControllerTest{
   def main(args: Array[String]) {
+    soupy.application = MyApplication
+
     println(UsersController.index)
 
     val m = new Query
