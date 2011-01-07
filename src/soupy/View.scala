@@ -22,7 +22,7 @@ object View {
 
 class View(val path: String, var fullHtml:Boolean = false) {
   lazy val doc: Document = {
-    val f = new File(soupy.root + "/app/views" + path + ".html")
+    val f = new File(soupy.application.root + "/app/views" + path + ".html")
     Jsoup.parse(f, "UTF-8")
   }
 

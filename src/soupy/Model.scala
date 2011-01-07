@@ -169,9 +169,7 @@ class Query[T](var tableName: String = "",
 
   protected
   def usingConnection(callback: Connection => Unit) {
-    Class.forName("com.mysql.jdbc.Driver").newInstance
-    val conn = DriverManager.getConnection("jdbc:mysql:///" + soupy.db("database"),
-      soupy.db("user"), soupy.db("password"))
+    val conn = soupy.application.getConnection
     try {
       callback(conn)
     } finally {
