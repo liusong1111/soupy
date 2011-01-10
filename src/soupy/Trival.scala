@@ -1,6 +1,27 @@
 package trvial
 
 //----------- SQL Related -------------
+//--------Order --------------
+trait Order {
+  def toSQL: String
+}
+
+trait SimpleOrder extends Order
+
+class DescOrder(val prop: Property[_]) extends SimpleOrder {
+  override def toSQL = prop.name + " DESC"
+}
+
+class AscOrder(val prop: Property[_]) extends SimpleOrder {
+  override def toSQL = prop.name + " ASC"
+}
+
+class CompositeOrder(val orders: List[SimpleOrder]) extends Order {
+  override def toSQL = orders.map {
+    order => order.toSQL
+  }.mkString(",")
+}
+
 //-------------criteria----------------
 trait Criteria {
   def toSQL: String
@@ -50,13 +71,17 @@ class InCriteria[A](val prop: Property[A], val values: List[A]) extends SimpleCr
   }
 }
 
-abstract class RawCriteria extends SimpleCriteria
+class RawCriteria(val sqlTemplate: String) extends SimpleCriteria {
+  override def toSQL = sqlTemplate
+}
 
-abstract class ListRawCriteria(val sqlTemplate: String, val args: List[Any]) extends SimpleCriteria {
+//TODO: missing toSQL implementation
+class ListRawCriteria(override val sqlTemplate: String, val args: List[Any]) extends RawCriteria(sqlTemplate) {
 
 }
 
-abstract class MapRawCriteria(val sqlTemplate: String, val args: Map[Any, Any]) extends SimpleCriteria {
+//TODO: missing toSQL implementation
+class MapRawCriteria(override val sqlTemplate: String, val args: Map[Any, Any]) extends RawCriteria(sqlTemplate) {
 
 }
 
@@ -84,6 +109,7 @@ class OrCriteria(val criterias: Criteria*) extends CompositeCriteria {
 trait PropertyOperations[A] {
   self: Property[A] =>
 
+  //criteria
   def >(value: A) = new NormalCriteria(this, ">", value)
 
   def >=(value: A) = new NormalCriteria(this, ">=", value)
@@ -101,6 +127,11 @@ trait PropertyOperations[A] {
   def isNotNull = new IsNotNullCriteria(this)
 
   def in(values: List[A]) = new InCriteria(this, values)
+
+  //order
+  def asc = new AscOrder(this)
+
+  def desc = new DescOrder(this)
 }
 
 //value or property initializer
@@ -118,10 +149,11 @@ abstract class Property[A](val name: String) extends PropertyOperations[A] {
 
 //for String
 class StringProperty(override val name: String) extends Property[String](name) {
+  val singleQuoteRegexp = """'""".r
+
   override
   def encode(value: String) = {
-    //TODO: still unfinished
-    "'" + value + "'"
+    "'" + singleQuoteRegexp.replaceAllIn(value, "''") + "'"
   }
 
   def like(value: String) = {
@@ -188,6 +220,193 @@ trait AccessorsDef extends TableDef {
 trait Schema extends PropertiesDef
 
 trait Model extends AccessorsDef
+
+//------ Query --------------------
+class Query(val _from: String,
+            val _select: Option[String] = None,
+            val _join: Option[String] = None,
+            val _where: Option[Criteria] = None,
+            val _order: Option[CompositeOrder] = None,
+            val _group: Option[String] = None,
+            val _having: Option[String] = None,
+            val _offset: Option[Int] = None,
+            val _limit: Option[Int] = None) {
+  def copy(_from: String,
+           _select: Option[String],
+           _join: Option[String],
+           _where: Option[Criteria],
+           _order: Option[CompositeOrder],
+           _group: Option[String],
+           _having: Option[String],
+           _offset: Option[Int],
+           _limit: Option[Int]): Query = {
+    new Query(_from,
+      _select,
+      _join,
+      _where,
+      _order,
+      _group,
+      _having,
+      _offset,
+      _limit)
+  }
+
+  def from(_from: String): Query = {
+    this.copy(_from,
+      _select,
+      _join,
+      _where,
+      _order,
+      _group,
+      _having,
+      _offset,
+      _limit)
+  }
+
+  def select(_select: String): Query = {
+    this.copy(_from,
+      Some(_select),
+      _join,
+      _where,
+      _order,
+      _group,
+      _having,
+      _offset,
+      _limit)
+  }
+
+  def join(_join: String): Query = {
+    this.copy(_from,
+      _select,
+      Some(_join),
+      _where,
+      _order,
+      _group,
+      _having,
+      _offset,
+      _limit)
+  }
+
+  def group(_group: String): Query = {
+    this.copy(_from,
+      _select,
+      _join,
+      _where,
+      _order,
+      Some(_group),
+      _having,
+      _offset,
+      _limit)
+  }
+
+  def having(_having: String): Query = {
+    this.copy(_from,
+      _select,
+      _join,
+      _where,
+      _order,
+      _group,
+      Some(_having),
+      _offset,
+      _limit)
+  }
+
+  def offset(_offset: Int): Query = {
+    this.copy(_from,
+      _select,
+      _join,
+      _where,
+      _order,
+      _group,
+      _having,
+      Some(_offset),
+      _limit)
+  }
+
+  def limit(_limit: Int): Query = {
+    this.copy(_from,
+      _select,
+      _join,
+      _where,
+      _order,
+      _group,
+      _having,
+      _offset,
+      Some(_limit)
+    )
+  }
+
+  // composite order
+  def order(_order: CompositeOrder): Query = {
+    val the_order = if (this._order.isEmpty) _order else new CompositeOrder(List[SimpleOrder]((this._order.get.orders ::: _order.orders): _*))
+    this.copy(_from,
+      _select,
+      _join,
+      _where,
+      Some(the_order),
+      _group,
+      _having,
+      _offset,
+      _limit)
+  }
+
+  // composite criteria
+  def where(_where: Criteria): Query = {
+    val the_where = if (this._where.isEmpty) {
+      _where
+    } else {
+      this._where.get && _where
+    }
+
+    this.copy(_from,
+      _select,
+      _join,
+      Some(the_where),
+      _order,
+      _group,
+      _having,
+      _offset,
+      _limit)
+  }
+
+  def &&(_where: Criteria): Query = {
+    where(_where)
+  }
+
+  def ||(_where: Criteria): Query = {
+    val the_where = if (this._where.isEmpty) None else Some(this._where.get || _where)
+
+    this.copy(_from,
+      _select,
+      _join,
+      the_where,
+      _order,
+      _group,
+      _having,
+      _offset,
+      _limit)
+  }
+
+  // enable: query1.where(query2)
+  implicit def queryToCriteria(query: Query): Criteria = {
+    query._where.getOrElse(new RawCriteria("1 = 1"))
+  }
+
+  def toSQL: String = {
+    val sql = List[Option[String]]((if (_select.isEmpty) Some("select *") else _select),
+      Some("from " + _from),
+      _join,
+      (if (_where.isEmpty) None else Some("where " + _where.get.toSQL)),
+      _group,
+      _having,
+      (if (_limit.isEmpty) None else Some("limit " + _limit.get)),
+      (if (_offset.isEmpty) None else Some("offset " + _offset))).filter(part => !part.isEmpty).map {
+      part => part.get
+    }.mkString("\n")
+
+    sql
+  }
+}
 
 //------------------------------
 //---- here is the demo---------
