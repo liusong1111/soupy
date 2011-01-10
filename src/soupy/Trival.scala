@@ -1,13 +1,14 @@
 package trvial
 
 //----------- SQL Related -------------
+//-------------criteria----------------
 trait Criteria {
   def toSQL: String
 
   override def toString = toSQL
 
   def where(criteria: Criteria) = {
-    new And(this, criteria)
+    new AndCriteria(this, criteria)
   }
 
   def &&(criteria: Criteria) = {
@@ -15,58 +16,91 @@ trait Criteria {
   }
 
   def ||(criteria: Criteria) = {
-    new Or(this, criteria)
+    new OrCriteria(this, criteria)
   }
 }
 
-class Where[A](val prop: Property[A], val op: String, val value: A) extends Criteria {
+trait SimpleCriteria extends Criteria
+
+class NormalCriteria[A](val prop: Property[A], val op: String, val value: A) extends SimpleCriteria {
   override def toSQL = prop.name + " " + op + " " + prop.encode(value)
 }
 
-class And(val criterias: Criteria*) extends Criteria {
+class LikeCriteria(val prop: Property[String], val value: String) extends SimpleCriteria {
+  override def toSQL = prop.name + " like " + prop.encode(value)
+}
+
+class IsNullCriteria(val prop: Property[_]) extends SimpleCriteria {
+  override def toSQL = prop.name + " is null"
+}
+
+class IsNotNullCriteria(val prop: Property[_]) extends SimpleCriteria {
+  override def toSQL = prop.name + " is not null"
+}
+
+class InCriteria[A](val prop: Property[A], val values: List[A]) extends SimpleCriteria {
+  override def toSQL = {
+    if (!values.isEmpty) {
+      prop.name + " in (" + values.map {
+        value => prop.encode(value)
+      }.mkString(",") + ")"
+    } else {
+      " 1=1 "
+    }
+  }
+}
+
+abstract class RawCriteria extends SimpleCriteria
+
+abstract class ListRawCriteria(val sqlTemplate: String, val args: List[Any]) extends SimpleCriteria {
+
+}
+
+abstract class MapRawCriteria(val sqlTemplate: String, val args: Map[Any, Any]) extends SimpleCriteria {
+
+}
+
+trait CompositeCriteria extends Criteria
+
+class AndCriteria(val criterias: Criteria*) extends CompositeCriteria {
   override
   def toSQL = {
     criterias.map {
-      criteria => if (criteria.isInstanceOf[Or]) "(" + criteria.toSQL + ")" else criteria.toSQL
+      criteria => if (criteria.isInstanceOf[OrCriteria]) "(" + criteria.toSQL + ")" else criteria.toSQL
     }.mkString(" AND ")
   }
 }
 
-class Or(val criterias: Criteria*) extends Criteria {
+class OrCriteria(val criterias: Criteria*) extends CompositeCriteria {
   override
   def toSQL = {
     criterias.map {
-      criteria => if (criteria.isInstanceOf[And]) "(" + criteria.toSQL + ")" else criteria.toSQL
+      criteria => if (criteria.isInstanceOf[AndCriteria]) "(" + criteria.toSQL + ")" else criteria.toSQL
     }.mkString(" OR ")
   }
 }
 
+//------ properties---------------------
 trait PropertyOperations[A] {
   self: Property[A] =>
 
-  def >(value: A) = {
-    new Where(this, ">", value)
-  }
+  def >(value: A) = new NormalCriteria(this, ">", value)
 
-  def >=(value: A) = {
-    new Where(this, ">=", value)
-  }
+  def >=(value: A) = new NormalCriteria(this, ">=", value)
 
-  def <(value: A) = {
-    new Where(this, "<", value)
-  }
+  def <(value: A) = new NormalCriteria(this, "<", value)
 
-  def <=(value: A) = {
-    new Where(this, "<=", value)
-  }
+  def <=(value: A) = new NormalCriteria(this, "<=", value)
 
-  def ==(value: A) = {
-    new Where(this, "=", value)
-  }
+  def ==(value: A) = new NormalCriteria(this, "=", value)
 
-  def !=(value: A) = {
-    new Where(this, "<>", value)
-  }
+  def !=(value: A) = new NormalCriteria(this, "<>", value)
+
+  def isNull = new IsNullCriteria(this)
+
+  def isNotNull = new IsNotNullCriteria(this)
+
+  def in(values: List[A]) = new InCriteria(this, values)
 }
 
 //value or property initializer
@@ -91,7 +125,7 @@ class StringProperty(override val name: String) extends Property[String](name) {
   }
 
   def like(value: String) = {
-    new Where(this, "like", value)
+    new LikeCriteria(this, value)
   }
 }
 
@@ -123,7 +157,7 @@ object IntValue extends TypeBuilder[Int] {
 }
 
 //type definitions
-trait VTypes {
+trait TableDef {
   type StringType
   type IntType
 
@@ -133,13 +167,9 @@ trait VTypes {
   def field[T](builder: TypeBuilder[T], name: String, options: Pair[String, String]*): T = {
     builder(name)
   }
-
-  def f(s: String) = {
-    println(s)
-  }
 }
 
-trait PropertyTypes extends VTypes {
+trait PropertiesDef extends TableDef {
   type StringType = StringProperty
   val StringType: TypeBuilder[StringProperty] = StringProperty
 
@@ -148,18 +178,22 @@ trait PropertyTypes extends VTypes {
 
 }
 
-trait ValueTypes extends VTypes {
+trait AccessorsDef extends TableDef {
   type StringType = String
   val StringType: TypeBuilder[String] = StringValue
   type IntType = Int
   val IntType: TypeBuilder[Int] = IntValue
 }
 
+trait Schema extends PropertiesDef
+
+trait Model extends AccessorsDef
+
 //------------------------------
 //---- here is the demo---------
 //------------------------------
 
-trait UserDef extends VTypes {
+trait UserDef extends TableDef {
   //still duplicate on property name.
   //note: should archive: generate var declaration and var initialization
   //Is there any approach to avoid them?
@@ -167,11 +201,11 @@ trait UserDef extends VTypes {
   var age = field(IntType, "age")
 }
 
-object User extends PropertyTypes with UserDef {
+class User extends Model with UserDef {
 
 }
 
-class User extends ValueTypes with UserDef {
+object User extends Schema with UserDef {
 
 }
 
