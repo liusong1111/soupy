@@ -210,6 +210,13 @@ trait PropertiesDef extends TableDef {
   type IntType = IntProperty
   val IntType: TypeBuilder[IntProperty] = IntProperty
 
+  var properties = List[Property[Any]]()
+  override def field[T](builder: TypeBuilder[T], name: String, options: Pair[String, String]*): T = {
+    val prop = builder(name)
+
+    properties = properties ::: List[Property[Any]](prop.asInstanceOf[Property[Any]])
+    prop
+  }
 }
 
 trait AccessorsDef extends TableDef {
@@ -217,9 +224,19 @@ trait AccessorsDef extends TableDef {
   val StringType: TypeBuilder[String] = StringValue
   type IntType = Int
   val IntType: TypeBuilder[Int] = IntValue
+
+  override def field[T](builder: TypeBuilder[T], name: String, options: Pair[String, String]*): T = {
+    builder(name)
+  }
 }
 
-trait Schema extends PropertiesDef
+class Schema[T](val modelClass:Class[T]) extends PropertiesDef{
+  def build:T={
+    val m = modelClass.newInstance
+
+    m.asInstanceOf[T]
+  }
+}
 
 trait Model extends AccessorsDef
 
@@ -531,6 +548,7 @@ trait UserDef extends TableDef {
   //still duplicate on property name.
   //note: should archive: generate var declaration and var initialization
   //Is there any approach to avoid them?
+  implicit var U = classOf[User]
   var name = field(StringType, "name")
   var age = field(IntType, "age")
 }
@@ -539,7 +557,7 @@ class User extends Model with UserDef {
 
 }
 
-object User extends Schema with UserDef {
+object User extends Schema(classOf[User]) with UserDef {
 
 }
 
@@ -574,6 +592,10 @@ object Main {
     println(User.name == "liusong" && User.age > 28 || User.age < 10 || (User.name like "liu%"))
     //(name = 'liusong' AND (age > 28 OR age < 10)) OR name like 'liu%'
     println(User.name == "liusong" && (User.age > 28 || User.age < 10) || (User.name like "liu%"))
+
+    User.properties.foreach{prop =>
+      println(prop.name)
+    }
   }
 }
 
