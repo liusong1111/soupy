@@ -1,5 +1,7 @@
 package trvial
 
+import java.sql.{DriverManager, Connection, ResultSet, PreparedStatement}
+
 //----------- SQL Related -------------
 //--------Order --------------
 trait Order {
@@ -406,7 +408,120 @@ class Query(val _from: String,
 
     sql
   }
+
+  def executeQuery(callback: ResultSet => Unit): Unit = {
+    Repository.default.within {
+      conn =>
+        var st: PreparedStatement = null
+        var rs: ResultSet = null
+        try {
+          val sql = toSQL
+          st = conn.prepareStatement(sql)
+          rs = st.executeQuery
+          while (rs.next) {
+            callback(rs)
+          }
+
+        } finally {
+          try {
+            rs.close
+          } catch {
+            case _ => None
+          }
+          try {
+            st.close
+          } catch {
+            case _ => None
+          }
+        }
+    }
+  }
 }
+
+
+//--------- Update -------
+trait ModifyBase{
+  def toSQL:String
+
+  def executeUpdate={
+    val sql = toSQL
+    var result = false
+    Repository.default.within{
+      conn =>
+        var st: PreparedStatement = null
+        try {
+          st = conn.prepareStatement(sql)
+          result = st.executeUpdate == 0
+        } finally {
+          try {
+            st.close
+          } catch {
+            case _ => None
+          }
+        }
+    }
+    result
+  }
+}
+class Update(val from: String, val sets: String, val criteria: Option[Criteria]) extends ModifyBase {
+  override def toSQL = {
+    ("update " + from + " " + sets) + (if (criteria.isEmpty) "" else (" where " + criteria.get.toSQL))
+  }
+}
+
+class Delete(val from: String, val criteria: Option[Criteria]) extends ModifyBase  {
+  override def toSQL = {
+    "delete " + from + (if (criteria.isEmpty) "" else (" where " + criteria.get.toSQL))
+  }
+}
+
+class Insert(val from: String, val fields: String, val values: String) extends ModifyBase  {
+  override def toSQL = {
+    "insert into " + from + "(" + fields + ") values(" + values + ")"
+  }
+}
+
+//------ repository
+class Repository(val name: String, val setting: Map[String, String]) {
+  var connection: Connection = getConnection
+
+  //TODO:目前只支持mysql
+  def getConnection: Connection = {
+    Class.forName("com.mysql.jdbc.Driver").newInstance
+    val conn = DriverManager.getConnection("jdbc:mysql:///" + setting("database"),
+      setting("user"), setting("password"))
+
+    conn
+  }
+
+  def within(callback: (Connection) => Unit) {
+    val conn = connection
+    try {
+      callback(conn)
+    } finally {
+      try {
+        conn.close
+      } catch {
+        case _ => None
+      }
+    }
+  }
+}
+
+object Repository {
+  val repositories = Map[String, Repository]()
+
+  def default = repositories("default")
+
+  def setup(name: String, setting: Map[String, String]): Repository = {
+    val repository = new Repository(name, setting)
+    repositories(name) = repository
+    repository
+  }
+
+
+}
+
 
 //------------------------------
 //---- here is the demo---------
