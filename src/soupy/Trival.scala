@@ -141,16 +141,25 @@ trait TypeBuilder[T] {
   def apply(name: String): T
 }
 
+trait PropertyTypeBuilder[T] extends TypeBuilder[T]{
+  type M
+  val modelClass:Class[M]
+}
+
+trait ValueTypeBuilder[T] extends TypeBuilder[T]{
+
+}
+
 //base class for property
 
-abstract class Property[A](val name: String) extends PropertyOperations[A] {
+abstract class Property[A](val modelClass:Class[_], val name: String) extends PropertyOperations[A] {
   def encode(value: A): String = {
     value.toString
   }
 }
 
 //for String
-class StringProperty(override val name: String) extends Property[String](name) {
+class StringProperty(override val modelClass:Class[_], override val name: String) extends Property[String](modelClass, name) {
   val singleQuoteRegexp = """'""".r
 
   override
@@ -163,78 +172,90 @@ class StringProperty(override val name: String) extends Property[String](name) {
   }
 }
 
-object StringProperty extends TypeBuilder[StringProperty] {
-  def apply(name: String): StringProperty = {
-    new StringProperty(name)
+trait StringPropertyBuilder extends PropertyTypeBuilder[StringProperty] {
+  override def apply(name: String):StringProperty={
+    new StringProperty(modelClass, name)
   }
 }
 
-object StringValue extends TypeBuilder[String] {
-  def apply(name: String): String = {
+object StringValueBuilder extends ValueTypeBuilder[String] {
+  def apply(name:String): String = {
     ""
   }
 }
 
 //for Int
-class IntProperty(override val name: String) extends Property[Int](name: String)
+class IntProperty(override val modelClass:Class[_], override val name: String) extends Property[Int](modelClass, name)
 
-object IntProperty extends TypeBuilder[IntProperty] {
-  def apply(name: String): IntProperty = {
-    new IntProperty(name)
+trait IntPropertyBuilder extends PropertyTypeBuilder[IntProperty] {
+  override def apply(name: String): IntProperty = {
+    new IntProperty(modelClass, name)
   }
 }
 
-object IntValue extends TypeBuilder[Int] {
-  def apply(name: String): Int = {
+object IntValueBuilder extends ValueTypeBuilder[Int] {
+  override def apply(name:String): Int = {
     0
   }
 }
 
 //type definitions
 trait TableDef {
+  type M
+  val modelClass:Class[M]
+  val S:Schema
+
   type StringType
   type IntType
 
   val StringType: TypeBuilder[StringType]
   val IntType: TypeBuilder[IntType]
 
-  def field[T](builder: TypeBuilder[T], name: String, options: Pair[String, String]*): T = {
-    builder(name)
-  }
+  def field[T](builder: TypeBuilder[T], name: String, options: Pair[String, String]*): T
 }
 
 trait PropertiesDef extends TableDef {
   type StringType = StringProperty
-  val StringType: TypeBuilder[StringProperty] = StringProperty
+
+  type M1 = M
+  val mc = modelClass
+
+  val StringType: TypeBuilder[StringProperty] = new StringPropertyBuilder{
+    type M = M1
+    val modelClass:Class[M] = mc
+  }
 
   type IntType = IntProperty
-  val IntType: TypeBuilder[IntProperty] = IntProperty
+  val IntType: TypeBuilder[IntProperty] = new IntPropertyBuilder {
+    type M = M1
+    val modelClass = mc
+  }
 
-  var properties = List[Property[Any]]()
+  var properties = List[Property[_]]()
   override def field[T](builder: TypeBuilder[T], name: String, options: Pair[String, String]*): T = {
     val prop = builder(name)
 
-    properties = properties ::: List[Property[Any]](prop.asInstanceOf[Property[Any]])
+    properties = properties ::: List[Property[_]](prop.asInstanceOf[Property[_]])
     prop
   }
 }
 
 trait AccessorsDef extends TableDef {
   type StringType = String
-  val StringType: TypeBuilder[String] = StringValue
+  val StringType: TypeBuilder[String] = StringValueBuilder
   type IntType = Int
-  val IntType: TypeBuilder[Int] = IntValue
+  val IntType: TypeBuilder[Int] = IntValueBuilder
 
   override def field[T](builder: TypeBuilder[T], name: String, options: Pair[String, String]*): T = {
     builder(name)
   }
 }
 
-class Schema[T](val modelClass:Class[T]) extends PropertiesDef{
-  def build:T={
+trait Schema extends PropertiesDef{
+  def build:M={
     val m = modelClass.newInstance
 
-    m.asInstanceOf[T]
+    m.asInstanceOf[M]
   }
 }
 
@@ -548,7 +569,10 @@ trait UserDef extends TableDef {
   //still duplicate on property name.
   //note: should archive: generate var declaration and var initialization
   //Is there any approach to avoid them?
-  implicit var U = classOf[User]
+  type M = User
+  val modelClass = classOf[User]
+  val S = User
+
   var name = field(StringType, "name")
   var age = field(IntType, "age")
 }
@@ -557,7 +581,7 @@ class User extends Model with UserDef {
 
 }
 
-object User extends Schema(classOf[User]) with UserDef {
+object User extends Schema with UserDef {
 
 }
 
@@ -596,6 +620,10 @@ object Main {
     User.properties.foreach{prop =>
       println(prop.name)
     }
+
+    val u = User.build
+    println("^^^^")
+    println(u.name + u.age)
   }
 }
 
