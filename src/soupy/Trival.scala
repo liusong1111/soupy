@@ -1,6 +1,9 @@
 package trvial
 
 import java.sql.{DriverManager, Connection, ResultSet, PreparedStatement}
+import java.beans.Introspector
+import java.beans.PropertyDescriptor
+import reflect.BeanInfo
 
 //----------- SQL Related -------------
 //--------Order --------------
@@ -136,30 +139,56 @@ trait PropertyOperations[A] {
   def desc = new DescOrder(this)
 }
 
+trait PropertyWorker[A] {
+  self: Property[A] =>
+  def get(m: Object): A = {
+    getter.invoke(m).asInstanceOf[A]
+  }
+
+  def set(m: Object, v: A) = {
+    setter.invoke(m, v.asInstanceOf[Object])
+  }
+
+  lazy val getter = {
+    val propertyDescriptors = Introspector.getBeanInfo(modelClass).getPropertyDescriptors
+    propertyDescriptors.filter {
+      prop =>
+        prop.getName == self.name
+    }.head.getReadMethod
+  }
+  lazy val setter = {
+    val propertyDescriptors = Introspector.getBeanInfo(modelClass).getPropertyDescriptors
+    propertyDescriptors.filter {
+      prop =>
+        prop.getName == self.name
+    }.head.getWriteMethod
+  }
+}
+
 //value or property initializer
 trait TypeBuilder[T] {
   def apply(name: String): T
 }
 
-trait PropertyTypeBuilder[T] extends TypeBuilder[T]{
+trait PropertyTypeBuilder[T] extends TypeBuilder[T] {
   type M
-  val modelClass:Class[M]
+  val modelClass: Class[M]
 }
 
-trait ValueTypeBuilder[T] extends TypeBuilder[T]{
+trait ValueTypeBuilder[T] extends TypeBuilder[T] {
 
 }
 
 //base class for property
 
-abstract class Property[A](val modelClass:Class[_], val name: String) extends PropertyOperations[A] {
+abstract class Property[A](val modelClass: Class[_], val name: String) extends PropertyOperations[A] with PropertyWorker[A] {
   def encode(value: A): String = {
     value.toString
   }
 }
 
 //for String
-class StringProperty(override val modelClass:Class[_], override val name: String) extends Property[String](modelClass, name) {
+class StringProperty(override val modelClass: Class[_], override val name: String) extends Property[String](modelClass, name) {
   val singleQuoteRegexp = """'""".r
 
   override
@@ -173,19 +202,19 @@ class StringProperty(override val modelClass:Class[_], override val name: String
 }
 
 trait StringPropertyBuilder extends PropertyTypeBuilder[StringProperty] {
-  override def apply(name: String):StringProperty={
+  override def apply(name: String): StringProperty = {
     new StringProperty(modelClass, name)
   }
 }
 
 object StringValueBuilder extends ValueTypeBuilder[String] {
-  def apply(name:String): String = {
+  def apply(name: String): String = {
     ""
   }
 }
 
 //for Int
-class IntProperty(override val modelClass:Class[_], override val name: String) extends Property[Int](modelClass, name)
+class IntProperty(override val modelClass: Class[_], override val name: String) extends Property[Int](modelClass, name)
 
 trait IntPropertyBuilder extends PropertyTypeBuilder[IntProperty] {
   override def apply(name: String): IntProperty = {
@@ -194,7 +223,7 @@ trait IntPropertyBuilder extends PropertyTypeBuilder[IntProperty] {
 }
 
 object IntValueBuilder extends ValueTypeBuilder[Int] {
-  override def apply(name:String): Int = {
+  override def apply(name: String): Int = {
     0
   }
 }
@@ -202,8 +231,8 @@ object IntValueBuilder extends ValueTypeBuilder[Int] {
 //type definitions
 trait TableDef {
   type M
-  val modelClass:Class[M]
-  val S:Schema
+  val modelClass: Class[M]
+  val S: Schema
 
   type StringType
   type IntType
@@ -215,23 +244,22 @@ trait TableDef {
 }
 
 trait PropertiesDef extends TableDef {
+  self =>
   type StringType = StringProperty
 
-  type M1 = M
-  val mc = modelClass
-
-  val StringType: TypeBuilder[StringProperty] = new StringPropertyBuilder{
-    type M = M1
-    val modelClass:Class[M] = mc
+  lazy val StringType: TypeBuilder[StringProperty] = new StringPropertyBuilder {
+    type M = self.M
+    val modelClass: Class[M] = self.modelClass
   }
 
   type IntType = IntProperty
-  val IntType: TypeBuilder[IntProperty] = new IntPropertyBuilder {
-    type M = M1
-    val modelClass = mc
+  lazy val IntType: TypeBuilder[IntProperty] = new IntPropertyBuilder {
+    type M = self.M
+    val modelClass = self.modelClass
   }
 
   var properties = List[Property[_]]()
+
   override def field[T](builder: TypeBuilder[T], name: String, options: Pair[String, String]*): T = {
     val prop = builder(name)
 
@@ -251,8 +279,8 @@ trait AccessorsDef extends TableDef {
   }
 }
 
-trait Schema extends PropertiesDef{
-  def build:M={
+trait Schema extends PropertiesDef {
+  def build: M = {
     val m = modelClass.newInstance
 
     m.asInstanceOf[M]
@@ -478,13 +506,13 @@ class Query(val _from: String,
 
 
 //--------- Update -------
-trait ModifyBase{
-  def toSQL:String
+trait ModifyBase {
+  def toSQL: String
 
-  def executeUpdate={
+  def executeUpdate = {
     val sql = toSQL
     var result = false
-    Repository.default.within{
+    Repository.default.within {
       conn =>
         var st: PreparedStatement = null
         try {
@@ -501,19 +529,20 @@ trait ModifyBase{
     result
   }
 }
+
 class Update(val from: String, val sets: String, val criteria: Option[Criteria]) extends ModifyBase {
   override def toSQL = {
     ("update " + from + " " + sets) + (if (criteria.isEmpty) "" else (" where " + criteria.get.toSQL))
   }
 }
 
-class Delete(val from: String, val criteria: Option[Criteria]) extends ModifyBase  {
+class Delete(val from: String, val criteria: Option[Criteria]) extends ModifyBase {
   override def toSQL = {
     "delete " + from + (if (criteria.isEmpty) "" else (" where " + criteria.get.toSQL))
   }
 }
 
-class Insert(val from: String, val fields: String, val values: String) extends ModifyBase  {
+class Insert(val from: String, val fields: String, val values: String) extends ModifyBase {
   override def toSQL = {
     "insert into " + from + "(" + fields + ") values(" + values + ")"
   }
@@ -577,6 +606,7 @@ trait UserDef extends TableDef {
   var age = field(IntType, "age")
 }
 
+@BeanInfo
 class User extends Model with UserDef {
 
 }
@@ -617,13 +647,18 @@ object Main {
     //(name = 'liusong' AND (age > 28 OR age < 10)) OR name like 'liu%'
     println(User.name == "liusong" && (User.age > 28 || User.age < 10) || (User.name like "liu%"))
 
-    User.properties.foreach{prop =>
-      println(prop.name)
+    User.properties.foreach {
+      prop =>
+        println(prop.name)
     }
 
     val u = User.build
     println("^^^^")
     println(u.name + u.age)
+
+    //
+    User.name.set(user, "another name")
+    println(User.name.get(user))
   }
 }
 
