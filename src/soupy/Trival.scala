@@ -339,7 +339,7 @@ trait Schema extends Query with PropertiesDef {
 trait Model extends AccessorsDef
 
 //------ Query --------------------
-class Query(val _from: String = null,
+case class Query(val _from: String = null,
             val _select: Option[String] = None,
             val _join: Option[String] = None,
             val _where: Option[Criteria] = None,
@@ -348,123 +348,38 @@ class Query(val _from: String = null,
             val _having: Option[String] = None,
             val _offset: Option[Int] = None,
             val _limit: Option[Int] = None) {
-  def copy(_from: String,
-           _select: Option[String],
-           _join: Option[String],
-           _where: Option[Criteria],
-           _order: Option[CompositeOrder],
-           _group: Option[String],
-           _having: Option[String],
-           _offset: Option[Int],
-           _limit: Option[Int]): Query = {
-    new Query(_from,
-      _select,
-      _join,
-      _where,
-      _order,
-      _group,
-      _having,
-      _offset,
-      _limit)
-  }
-
   def from(_from: String): Query = {
-    this.copy(_from,
-      _select,
-      _join,
-      _where,
-      _order,
-      _group,
-      _having,
-      _offset,
-      _limit)
+    this.copy(_from = _from)
   }
 
   def select(_select: String): Query = {
-    this.copy(_from,
-      Some(_select),
-      _join,
-      _where,
-      _order,
-      _group,
-      _having,
-      _offset,
-      _limit)
+    this.copy(_select = Some(_select))
   }
 
   def join(_join: String): Query = {
-    this.copy(_from,
-      _select,
-      Some(_join),
-      _where,
-      _order,
-      _group,
-      _having,
-      _offset,
-      _limit)
+    this.copy(_join = Some(_join))
   }
 
   def group(_group: String): Query = {
-    this.copy(_from,
-      _select,
-      _join,
-      _where,
-      _order,
-      Some(_group),
-      _having,
-      _offset,
-      _limit)
+    this.copy(_group = Some(_group))
   }
 
   def having(_having: String): Query = {
-    this.copy(_from,
-      _select,
-      _join,
-      _where,
-      _order,
-      _group,
-      Some(_having),
-      _offset,
-      _limit)
+    this.copy(_group = Some(_having))
   }
 
   def offset(_offset: Int): Query = {
-    this.copy(_from,
-      _select,
-      _join,
-      _where,
-      _order,
-      _group,
-      _having,
-      Some(_offset),
-      _limit)
+    this.copy(_offset = Some(_offset))
   }
 
   def limit(_limit: Int): Query = {
-    this.copy(_from,
-      _select,
-      _join,
-      _where,
-      _order,
-      _group,
-      _having,
-      _offset,
-      Some(_limit)
-    )
+    this.copy(_limit = Some(_limit))
   }
 
   // composite order
   def order(_order: CompositeOrder): Query = {
     val the_order = if (this._order.isEmpty) _order else new CompositeOrder(List[SimpleOrder]((this._order.get.orders ::: _order.orders): _*))
-    this.copy(_from,
-      _select,
-      _join,
-      _where,
-      Some(the_order),
-      _group,
-      _having,
-      _offset,
-      _limit)
+    this.copy(_order = Some(the_order))
   }
 
   // composite criteria
@@ -475,15 +390,7 @@ class Query(val _from: String = null,
       this._where.get && _where
     }
 
-    this.copy(_from,
-      _select,
-      _join,
-      Some(the_where),
-      _order,
-      _group,
-      _having,
-      _offset,
-      _limit)
+    this.copy(_where = Some(the_where))
   }
 
   def &&(_where: Criteria): Query = {
@@ -493,15 +400,7 @@ class Query(val _from: String = null,
   def ||(_where: Criteria): Query = {
     val the_where = if (this._where.isEmpty) None else Some(this._where.get || _where)
 
-    this.copy(_from,
-      _select,
-      _join,
-      the_where,
-      _order,
-      _group,
-      _having,
-      _offset,
-      _limit)
+    this.copy(_where = the_where)
   }
 
   // enable: query1.where(query2)
@@ -536,7 +435,6 @@ class Query(val _from: String = null,
           while (rs.next) {
             callback(rs)
           }
-
         } finally {
           try {
             rs.close
@@ -581,19 +479,19 @@ trait ModifyBase {
   }
 }
 
-class Update(val from: String, val sets: String, val criteria: Option[Criteria]) extends ModifyBase {
+case class Update(val from: String, val sets: String, val criteria: Option[Criteria]) extends ModifyBase {
   override def toSQL = {
     ("update " + from + " " + sets) + (if (criteria.isEmpty) "" else (" where " + criteria.get.toSQL))
   }
 }
 
-class Delete(val from: String, val criteria: Option[Criteria]) extends ModifyBase {
+case class Delete(val from: String, val criteria: Option[Criteria]) extends ModifyBase {
   override def toSQL = {
     "delete " + from + (if (criteria.isEmpty) "" else (" where " + criteria.get.toSQL))
   }
 }
 
-class Insert(val from: String, val fields: String, val values: String) extends ModifyBase {
+case class Insert(val from: String, val fields: String, val values: String) extends ModifyBase {
   override def toSQL = {
     "insert into " + from + "(" + fields + ") values(" + values + ")"
   }
