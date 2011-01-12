@@ -9,6 +9,8 @@ import reflect.BeanInfo
 //--------Order --------------
 trait Order {
   def toSQL: String
+
+  override def toString = toSQL
 }
 
 trait SimpleOrder extends Order
@@ -502,6 +504,8 @@ class Query(val _from: String,
         }
     }
   }
+
+  override def toString = toSQL
 }
 
 
@@ -646,6 +650,8 @@ object Main {
     println(User.name == "liusong" && User.age > 28 || User.age < 10 || (User.name like "liu%"))
     //(name = 'liusong' AND (age > 28 OR age < 10)) OR name like 'liu%'
     println(User.name == "liusong" && (User.age > 28 || User.age < 10) || (User.name like "liu%"))
+    // name desc
+    println(User.name.desc)
 
     User.properties.foreach {
       prop =>
@@ -656,9 +662,15 @@ object Main {
     println("^^^^")
     println(u.name + u.age)
 
-    //
+    //you can use reflect style but type safe like this: User.name.set(m, "sliu")
     User.name.set(user, "another name")
     println(User.name.get(user))
+
+    //select *
+    //from users
+    //where name = 'sliu' AND age > 30
+    //group by age
+    println(new Query("users").where(User.name == "sliu").where(User.age > 30).group("group by age")) //.order(User.age.desc)
   }
 }
 
