@@ -1,4 +1,4 @@
-package trvial
+package trial
 
 import java.sql.{DriverManager, Connection, ResultSet, PreparedStatement}
 import java.beans.Introspector
@@ -255,8 +255,6 @@ object IntValueBuilder extends ValueTypeBuilder[Int] {
 trait TableDef {
   type M
   val modelClass: Class[M]
-  val S: Schema
-  val tableName: String
 
   type StringType
   type IntType
@@ -306,8 +304,77 @@ trait AccessorsDef extends TableDef {
   }
 }
 
-trait Schema extends Query with PropertiesDef {
-  override val _from = tableName
+trait Copyable {
+  self: {def copy(query: Query): Any} =>
+
+  type THIS
+
+  def dup(query: Query): THIS = {
+    val ins = self.copy(query)
+    ins.asInstanceOf[THIS]
+  }
+}
+
+trait QueryDelegator extends Copyable {
+  self: Schema {def copy(query: Query): Any} =>
+
+  def from(_from: String): THIS = {
+    this.dup(query.from(_from))
+  }
+
+  def select(_select: String): THIS = {
+    this.dup(query.select(_select))
+  }
+
+  def join(_join: String): THIS = {
+    this.dup(query.join(_join))
+  }
+
+  def group(_group: String): THIS = {
+    this.dup(query.group(_group))
+  }
+
+  def having(_having: String): THIS = {
+    this.dup(query.having(_having))
+  }
+
+  def offset(_offset: Int): THIS = {
+    this.dup(query.offset(_offset))
+  }
+
+  def limit(_limit: Int): THIS = {
+    this.dup(query.limit(_limit))
+  }
+
+  // composite order
+  def order(_order: CompositeOrder): THIS = {
+    this.dup(query.order(_order))
+  }
+
+  // composite criteria
+  def where(_where: Criteria): THIS = {
+    this.dup(query.where(_where))
+  }
+
+  def &&(_where: Criteria): THIS = {
+    this.dup(query.where(_where))
+  }
+
+  def ||(_where: Criteria): THIS = {
+    this.dup(query || _where)
+  }
+
+  def toSQL = query.toSQL
+
+  override def toString = toSQL
+}
+
+trait Schema extends PropertiesDef with QueryDelegator {
+  self: {def copy(query: Query): Any} =>
+
+  type THIS = this.type
+
+  val query: Query
 
   def build: M = {
     val m = modelClass.newInstance
@@ -315,7 +382,17 @@ trait Schema extends Query with PropertiesDef {
     m.asInstanceOf[M]
   }
 
-  def all(rs: ResultSet): List[M] = {
+  def extractAll(q: Query): List[M] = {
+    var result = List[M]()
+    q.executeQuery {
+      rs =>
+        result = extractAll(rs)
+    }
+
+    result
+  }
+
+  def extractAll(rs: ResultSet): List[M] = {
     var result = List[M]()
     while (rs.next()) {
       val m = rs2M(rs)
@@ -340,14 +417,14 @@ trait Model extends AccessorsDef
 
 //------ Query --------------------
 case class Query(val _from: String = null,
-            val _select: Option[String] = None,
-            val _join: Option[String] = None,
-            val _where: Option[Criteria] = None,
-            val _order: Option[CompositeOrder] = None,
-            val _group: Option[String] = None,
-            val _having: Option[String] = None,
-            val _offset: Option[Int] = None,
-            val _limit: Option[Int] = None) {
+                 val _select: Option[String] = None,
+                 val _join: Option[String] = None,
+                 val _where: Option[Criteria] = None,
+                 val _order: Option[CompositeOrder] = None,
+                 val _group: Option[String] = None,
+                 val _having: Option[String] = None,
+                 val _offset: Option[Int] = None,
+                 val _limit: Option[Int] = None) {
   def from(_from: String): Query = {
     this.copy(_from = _from)
   }
@@ -544,14 +621,10 @@ object Repository {
 //------------------------------
 
 trait UserDef extends TableDef {
-  //still duplicate on property name.
-  //note: should archive: generate var declaration and var initialization
-  //Is there any approach to avoid them?
+  //still a little verbose.
   type M = User
   val modelClass = classOf[User]
-  val S = User
 
-  val tableName = "users"
 
   var name = field(StringType, "name")
   var age = field(IntType, "age")
@@ -562,9 +635,24 @@ class User extends Model with UserDef {
 
 }
 
-object User extends Schema with UserDef {
+//don't specify vars in the case class.
+case class UserSchema(override val query: Query) extends Schema with UserDef {
+  def youngs = {
+    where(age < 18)
+  }
 
+  def liu = {
+    where(name like "%liu%")
+  }
 }
+
+// NOTE: don't write things in object's body.
+// because we use case class's copy method to generate immutable objects, representing internal query.
+// cast to object User will cause ClassCastException.
+// sorry for that.
+// any better solution?
+object User extends UserSchema(Query("users"))
+
 
 object Main {
   def main(args: Array[String]) {
@@ -619,10 +707,11 @@ object Main {
     //group by age
     println(new Query("users").where(User.name == "sliu").where(User.age > 30).group("group by age")) //.order(User.age.desc)
 
-    //    User.where(User.age > 18).all.foreach{ user =>
-    //      println(user.name)
-    //    }
-
+    //select *
+    //from users
+    //where age < 18 AND name like '%liu%' AND age > 10
+    //limit 2
+    println(User.youngs.liu.where(User.age > 10).limit(2))
   }
 }
 
