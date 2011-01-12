@@ -5,6 +5,21 @@ import java.beans.Introspector
 import java.beans.PropertyDescriptor
 import reflect.BeanInfo
 
+//------------dirty Logger--------
+object Logger {
+  def debug(msg: String) = {
+    println("--debug--:" + msg)
+  }
+
+  def info(msg: String) = {
+    println("--info--:" + msg)
+  }
+
+  def error(msg: String) = {
+    println("--error--:" + msg)
+  }
+}
+
 //----------- SQL Related -------------
 //--------Order --------------
 trait Order {
@@ -307,72 +322,88 @@ trait AccessorsDef extends TableDef {
 trait Copyable {
   self: {def copy(query: Query): Any} =>
 
-  type THIS
+  type DAO <: Schema
 
-  def dup(query: Query): THIS = {
+  def dup(query: Query): DAO = {
     val ins = self.copy(query)
-    ins.asInstanceOf[THIS]
+    ins.asInstanceOf[DAO]
   }
 }
 
 trait QueryDelegator extends Copyable {
   self: Schema {def copy(query: Query): Any} =>
 
-  def from(_from: String): THIS = {
+  def from(_from: String): DAO = {
     this.dup(query.from(_from))
   }
 
-  def select(_select: String): THIS = {
+  def select(_select: String): DAO = {
     this.dup(query.select(_select))
   }
 
-  def join(_join: String): THIS = {
+  def join(_join: String): DAO = {
     this.dup(query.join(_join))
   }
 
-  def group(_group: String): THIS = {
+  def group(_group: String): DAO = {
     this.dup(query.group(_group))
   }
 
-  def having(_having: String): THIS = {
+  def having(_having: String): DAO = {
     this.dup(query.having(_having))
   }
 
-  def offset(_offset: Int): THIS = {
+  def offset(_offset: Int): DAO = {
     this.dup(query.offset(_offset))
   }
 
-  def limit(_limit: Int): THIS = {
+  def limit(_limit: Int): DAO = {
     this.dup(query.limit(_limit))
   }
 
   // composite order
-  def order(_order: CompositeOrder): THIS = {
+  def order(_order: CompositeOrder): DAO = {
     this.dup(query.order(_order))
   }
 
   // composite criteria
-  def where(_where: Criteria): THIS = {
+  def where(_where: Criteria): DAO = {
     this.dup(query.where(_where))
   }
 
-  def &&(_where: Criteria): THIS = {
+  def &&(_where: Criteria): DAO = {
     this.dup(query.where(_where))
   }
 
-  def ||(_where: Criteria): THIS = {
+  def ||(_where: Criteria): DAO = {
     this.dup(query || _where)
   }
 
-  def toSQL = query.toSQL
+  def toSQL = {
+    val q = refineQuery(query)
+    q.toSQL
+  }
 
   override def toString = toSQL
+
+  // if didn't specify select part, populate field names to combine the statement
+  def refineQuery(query: Query): Query = {
+    if (query._select.isEmpty) {
+      val _select = "select " + properties.map {
+        prop => prop.name
+      }.mkString(", ")
+      query.select(_select)
+    } else {
+      query
+    }
+
+  }
 }
 
 trait Schema extends PropertiesDef with QueryDelegator {
   self: {def copy(query: Query): Any} =>
 
-  type THIS = this.type
+  type DAO <: Schema
 
   val query: Query
 
@@ -382,24 +413,25 @@ trait Schema extends PropertiesDef with QueryDelegator {
     m.asInstanceOf[M]
   }
 
-  def extractAll(q: Query): List[M] = {
+  def all: List[M] = {
     var result = List[M]()
-    q.executeQuery {
+    executeQuery(query) {
       rs =>
-        result = extractAll(rs)
-    }
-
-    result
-  }
-
-  def extractAll(rs: ResultSet): List[M] = {
-    var result = List[M]()
-    while (rs.next()) {
-      val m = rs2M(rs)
-      result = m :: result
+        val m = rs2M(rs)
+        result = m :: result
     }
 
     result.reverse
+  }
+
+  def first: Option[M] = {
+    var result: Option[M] = None
+    executeQuery(this.limit(1).query) {
+      rs =>
+        result = Some(rs2M(rs))
+    }
+
+    result
   }
 
   implicit def rs2M(rs: ResultSet): M = {
@@ -411,6 +443,11 @@ trait Schema extends PropertiesDef with QueryDelegator {
     }
     m
   }
+
+  def executeQuery(query: Query = this.query)(callback: ResultSet => Unit) = {
+    refineQuery(query).executeQuery(callback)
+  }
+
 }
 
 trait Model extends AccessorsDef
@@ -507,6 +544,7 @@ case class Query(val _from: String = null,
         var rs: ResultSet = null
         try {
           val sql = toSQL
+          Logger.debug(sql)
           st = conn.prepareStatement(sql)
           rs = st.executeQuery
           while (rs.next) {
@@ -576,9 +614,7 @@ case class Insert(val from: String, val fields: String, val values: String) exte
 
 //------ repository
 class Repository(val name: String, val setting: Map[String, String]) {
-  var connection: Connection = getConnection
-
-  //TODO:目前只支持mysql
+  //TODO:hard code to mysql for now.
   def getConnection: Connection = {
     Class.forName("com.mysql.jdbc.Driver").newInstance
     val conn = DriverManager.getConnection("jdbc:mysql:///" + setting("database"),
@@ -588,7 +624,7 @@ class Repository(val name: String, val setting: Map[String, String]) {
   }
 
   def within(callback: (Connection) => Unit) {
-    val conn = connection
+    val conn = getConnection
     try {
       callback(conn)
     } finally {
@@ -602,17 +638,15 @@ class Repository(val name: String, val setting: Map[String, String]) {
 }
 
 object Repository {
-  val repositories = Map[String, Repository]()
+  var repositories = Map[String, Repository]()
 
   def default = repositories("default")
 
   def setup(name: String, setting: Map[String, String]): Repository = {
     val repository = new Repository(name, setting)
-    repositories(name) = repository
+    repositories += (name -> repository)
     repository
   }
-
-
 }
 
 
@@ -637,6 +671,8 @@ class User extends Model with UserDef {
 
 //don't specify vars in the case class.
 case class UserSchema(override val query: Query) extends Schema with UserDef {
+  type DAO = UserSchema
+
   def youngs = {
     where(age < 18)
   }
@@ -712,6 +748,24 @@ object Main {
     //where age < 18 AND name like '%liu%' AND age > 10
     //limit 2
     println(User.youngs.liu.where(User.age > 10).limit(2))
+
+    //setup real DB connection
+    Repository.setup("default", Map("adapter" -> "mysql", "host" -> "localhost", "database" -> "soupy", "user" -> "root", "password" -> ""))
+
+    //iterate the models
+    val youngs = User.youngs
+    youngs.all.foreach {
+      user =>
+        println("name:" + user.name + " age:" + user.age)
+    }
+
+    //check one
+    val liu = youngs.where(User.name like "%liu").first
+    if (liu.isEmpty) {
+      println("not found")
+    } else {
+      println("name:" + liu.get.name + " age:" + liu.get.age)
+    }
   }
 }
 
