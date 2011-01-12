@@ -15,11 +15,11 @@ trait Order {
 
 trait SimpleOrder extends Order
 
-class DescOrder(val prop: Property[_]) extends SimpleOrder {
+class DescOrder[A](val prop: Property[A]) extends SimpleOrder {
   override def toSQL = prop.name + " DESC"
 }
 
-class AscOrder(val prop: Property[_]) extends SimpleOrder {
+class AscOrder[A](val prop: Property[A]) extends SimpleOrder {
   override def toSQL = prop.name + " ASC"
 }
 
@@ -58,11 +58,11 @@ class LikeCriteria(val prop: Property[String], val value: String) extends Simple
   override def toSQL = prop.name + " like " + prop.encode(value)
 }
 
-class IsNullCriteria(val prop: Property[_]) extends SimpleCriteria {
+class IsNullCriteria[A](val prop: Property[A]) extends SimpleCriteria {
   override def toSQL = prop.name + " is null"
 }
 
-class IsNotNullCriteria(val prop: Property[_]) extends SimpleCriteria {
+class IsNotNullCriteria[A](val prop: Property[A]) extends SimpleCriteria {
   override def toSQL = prop.name + " is not null"
 }
 
@@ -165,11 +165,16 @@ trait PropertyWorker[A] {
         prop.getName == self.name
     }.head.getWriteMethod
   }
+
+
+  def read(rs: ResultSet, index: Int = this.index): A
+
+  def write(ps: PreparedStatement, value: A, index: Int = this.index)
 }
 
 //value or property initializer
 trait TypeBuilder[T] {
-  def apply(name: String): T
+  def apply(name: String, index: Int): T
 }
 
 trait PropertyTypeBuilder[T] extends TypeBuilder[T] {
@@ -183,19 +188,27 @@ trait ValueTypeBuilder[T] extends TypeBuilder[T] {
 
 //base class for property
 
-abstract class Property[A](val modelClass: Class[_], val name: String) extends PropertyOperations[A] with PropertyWorker[A] {
+abstract class Property[A](val modelClass: Class[_], val name: String, val index: Int) extends PropertyOperations[A] with PropertyWorker[A] {
   def encode(value: A): String = {
     value.toString
   }
 }
 
 //for String
-class StringProperty(override val modelClass: Class[_], override val name: String) extends Property[String](modelClass, name) {
+class StringProperty(override val modelClass: Class[_], override val name: String, override val index: Int) extends Property[String](modelClass, name, index) {
   val singleQuoteRegexp = """'""".r
 
   override
   def encode(value: String) = {
     "'" + singleQuoteRegexp.replaceAllIn(value, "''") + "'"
+  }
+
+  override def read(rs: ResultSet, index: Int = this.index): String = {
+    rs.getString(index)
+  }
+
+  override def write(ps: PreparedStatement, value: String, index: Int = this.index) = {
+    ps.setString(index, value)
   }
 
   def like(value: String) = {
@@ -204,28 +217,36 @@ class StringProperty(override val modelClass: Class[_], override val name: Strin
 }
 
 trait StringPropertyBuilder extends PropertyTypeBuilder[StringProperty] {
-  override def apply(name: String): StringProperty = {
-    new StringProperty(modelClass, name)
+  override def apply(name: String, index: Int): StringProperty = {
+    new StringProperty(modelClass, name, index)
   }
 }
 
 object StringValueBuilder extends ValueTypeBuilder[String] {
-  def apply(name: String): String = {
+  def apply(name: String, index: Int): String = {
     ""
   }
 }
 
 //for Int
-class IntProperty(override val modelClass: Class[_], override val name: String) extends Property[Int](modelClass, name)
+class IntProperty(override val modelClass: Class[_], override val name: String, override val index: Int) extends Property[Int](modelClass, name, index) {
+  override def read(rs: ResultSet, index: Int = this.index): Int = {
+    rs.getInt(index)
+  }
+
+  override def write(ps: PreparedStatement, value: Int, index: Int = this.index) = {
+    ps.setInt(index, value)
+  }
+}
 
 trait IntPropertyBuilder extends PropertyTypeBuilder[IntProperty] {
-  override def apply(name: String): IntProperty = {
-    new IntProperty(modelClass, name)
+  override def apply(name: String, index: Int): IntProperty = {
+    new IntProperty(modelClass, name, index)
   }
 }
 
 object IntValueBuilder extends ValueTypeBuilder[Int] {
-  override def apply(name: String): Int = {
+  override def apply(name: String, index: Int): Int = {
     0
   }
 }
@@ -235,6 +256,7 @@ trait TableDef {
   type M
   val modelClass: Class[M]
   val S: Schema
+  val tableName: String
 
   type StringType
   type IntType
@@ -260,12 +282,12 @@ trait PropertiesDef extends TableDef {
     val modelClass = self.modelClass
   }
 
-  var properties = List[Property[_]]()
+  var properties = List[Property[Any]]()
 
   override def field[T](builder: TypeBuilder[T], name: String, options: Pair[String, String]*): T = {
-    val prop = builder(name)
-
-    properties = properties ::: List[Property[_]](prop.asInstanceOf[Property[_]])
+    val index = (properties.length + 1)
+    val prop = builder(name, index)
+    properties = properties ::: List(prop.asInstanceOf[Property[Any]])
     prop
   }
 }
@@ -276,23 +298,48 @@ trait AccessorsDef extends TableDef {
   type IntType = Int
   val IntType: TypeBuilder[Int] = IntValueBuilder
 
+  private var _indexCounter = 0
+
   override def field[T](builder: TypeBuilder[T], name: String, options: Pair[String, String]*): T = {
-    builder(name)
+    _indexCounter += 1
+    builder(name, _indexCounter)
   }
 }
 
-trait Schema extends PropertiesDef {
+trait Schema extends Query with PropertiesDef {
+  override val _from = tableName
+
   def build: M = {
     val m = modelClass.newInstance
 
     m.asInstanceOf[M]
+  }
+
+  def all(rs: ResultSet): List[M] = {
+    var result = List[M]()
+    while (rs.next()) {
+      val m = rs2M(rs)
+      result = m :: result
+    }
+
+    result.reverse
+  }
+
+  implicit def rs2M(rs: ResultSet): M = {
+    val m = build
+    properties.foreach {
+      prop =>
+        val value = prop.read(rs)
+        prop.set(m.asInstanceOf[Object], value)
+    }
+    m
   }
 }
 
 trait Model extends AccessorsDef
 
 //------ Query --------------------
-class Query(val _from: String,
+class Query(val _from: String = null,
             val _select: Option[String] = None,
             val _join: Option[String] = None,
             val _where: Option[Criteria] = None,
@@ -606,6 +653,8 @@ trait UserDef extends TableDef {
   val modelClass = classOf[User]
   val S = User
 
+  val tableName = "users"
+
   var name = field(StringType, "name")
   var age = field(IntType, "age")
 }
@@ -671,6 +720,11 @@ object Main {
     //where name = 'sliu' AND age > 30
     //group by age
     println(new Query("users").where(User.name == "sliu").where(User.age > 30).group("group by age")) //.order(User.age.desc)
+
+    //    User.where(User.age > 18).all.foreach{ user =>
+    //      println(user.name)
+    //    }
+
   }
 }
 
