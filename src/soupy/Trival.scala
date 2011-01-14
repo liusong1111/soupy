@@ -26,9 +26,17 @@ trait Order {
   def toSQL: String
 
   override def toString = toSQL
+
+  def &&(anotherOrder: Order)={
+    new CompositeOrder(this.orders ::: anotherOrder.orders)
+  }
+
+  val orders:List[SimpleOrder]
 }
 
-trait SimpleOrder extends Order
+trait SimpleOrder extends Order{
+  val orders:List[SimpleOrder] = List(this)
+}
 
 class DescOrder[A](val prop: Property[A]) extends SimpleOrder {
   override def toSQL = prop.name + " DESC"
@@ -38,7 +46,7 @@ class AscOrder[A](val prop: Property[A]) extends SimpleOrder {
   override def toSQL = prop.name + " ASC"
 }
 
-class CompositeOrder(val orders: List[SimpleOrder]) extends Order {
+class CompositeOrder(override val orders: List[SimpleOrder]) extends Order {
   override def toSQL = orders.map {
     order => order.toSQL
   }.mkString(",")
@@ -362,7 +370,7 @@ trait QueryDelegator extends Copyable {
   }
 
   // composite order
-  def order(_order: CompositeOrder): DAO = {
+  def order(_order: Order): DAO = {
     this.dup(query.order(_order))
   }
 
@@ -482,7 +490,7 @@ case class Query(val _from: String = null,
                  val _select: Option[String] = None,
                  val _join: Option[String] = None,
                  val _where: Option[Criteria] = None,
-                 val _order: Option[CompositeOrder] = None,
+                 val _order: Option[Order] = None,
                  val _group: Option[String] = None,
                  val _having: Option[String] = None,
                  val _offset: Option[Int] = None,
@@ -516,8 +524,8 @@ case class Query(val _from: String = null,
   }
 
   // composite order
-  def order(_order: CompositeOrder): Query = {
-    val the_order = if (this._order.isEmpty) _order else new CompositeOrder(List[SimpleOrder]((this._order.get.orders ::: _order.orders): _*))
+  def order(_order: Order): Query = {
+    val the_order = if (this._order.isEmpty) _order else (this._order.get && _order)
     this.copy(_order = Some(the_order))
   }
 
@@ -552,6 +560,7 @@ case class Query(val _from: String = null,
       Some("from " + _from),
       _join,
       (if (_where.isEmpty) None else Some("where " + _where.get.toSQL)),
+      (if(_order.isEmpty) None else Some("order by " +  _order.get.toSQL)),
       _group,
       _having,
       (if (_limit.isEmpty) None else Some("limit " + _limit.get)),
@@ -766,7 +775,8 @@ object Main {
     //from users
     //where name = 'sliu' AND age > 30
     //group by age
-    println(new Query("users").where(User.name == "sliu").where(User.age > 30).group("group by age")) //.order(User.age.desc)
+    println("$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+    println(new Query("users").where(User.name == "sliu").where(User.age > 30).group("group by age").order(User.age.desc))
 
     //select *
     //from users
