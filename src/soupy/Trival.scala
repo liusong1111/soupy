@@ -400,7 +400,32 @@ trait QueryDelegator extends Copyable {
   }
 }
 
-trait Schema extends PropertiesDef with QueryDelegator {
+//TODO: you need define IdColumn
+trait ModifyDelegator{
+  self:Schema =>
+  def insert(m:M)={
+    val tableName = self.query._from
+    val strFields = properties.map{prop => prop.name}.mkString(", ")
+    val strValues = properties.map{prop => val v = prop.get(m.asInstanceOf[Object]); prop.encode(v)}.mkString(", ")
+
+    new Insert(tableName, strFields, strValues).executeUpdate
+  }
+
+  //TODO
+  def update(m: M)={
+    val tableName = self.query._from
+
+  }
+
+  //TODO
+  def delete(m: M)={
+    val tableName = self.query._from
+
+  }
+
+}
+
+trait Schema extends PropertiesDef with QueryDelegator with ModifyDelegator {
   self: {def copy(query: Query): Any} =>
 
   type DAO <: Schema
@@ -766,7 +791,13 @@ object Main {
     } else {
       println("name:" + liu.get.name + " age:" + liu.get.age)
     }
+
+    val u1 = new User
+    u1.name = "ha11"
+    u1.age = 33
+    User.insert(u1)
   }
+
 }
 
 
