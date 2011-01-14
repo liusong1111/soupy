@@ -27,15 +27,15 @@ trait Order {
 
   override def toString = toSQL
 
-  def &&(anotherOrder: Order)={
+  def &&(anotherOrder: Order) = {
     new CompositeOrder(this.orders ::: anotherOrder.orders)
   }
 
-  val orders:List[SimpleOrder]
+  val orders: List[SimpleOrder]
 }
 
-trait SimpleOrder extends Order{
-  val orders:List[SimpleOrder] = List(this)
+trait SimpleOrder extends Order {
+  val orders: List[SimpleOrder] = List(this)
 }
 
 class DescOrder[A](val prop: Property[A]) extends SimpleOrder {
@@ -311,7 +311,34 @@ trait PropertiesDef extends TableDef {
     properties = properties ::: List(prop.asInstanceOf[Property[Any]])
     prop
   }
+
+  def propertiesWithoutId = {
+    properties.filter {
+      idProperty.property ne _
+    }
+  }
+
+  val idProperty: IdProperty
 }
+
+class IdProperty(val property: Property[Any])
+
+object IdProperty {
+  def apply(_property: Any, idPropertyType: String = null) = {
+    val property = _property.asInstanceOf[Property[Any]]
+    idPropertyType match {
+      case "autoIncrement" => new AutoIncrementIdProperty(property)
+      case "normal" => new NormalIdProperty(property)
+      case _ => new DefaultIdProperty(property)
+    }
+  }
+}
+
+class DefaultIdProperty(override val property: Property[Any]) extends IdProperty(property)
+
+class AutoIncrementIdProperty(override val property: Property[Any]) extends IdProperty(property)
+
+class NormalIdProperty(override val property: Property[Any]) extends IdProperty(property)
 
 trait AccessorsDef extends TableDef {
   type StringType = String
@@ -409,25 +436,33 @@ trait QueryDelegator extends Copyable {
 }
 
 //TODO: you need define IdColumn
-trait ModifyDelegator{
-  self:Schema =>
-  def insert(m:M)={
+trait ModifyDelegator {
+  self: Schema =>
+  def insert(m: M) = {
     val tableName = self.query._from
-    val strFields = properties.map{prop => prop.name}.mkString(", ")
-    val strValues = properties.map{prop => val v = prop.get(m.asInstanceOf[Object]); prop.encode(v)}.mkString(", ")
+    val strFields = propertiesWithoutId.map {
+      prop => prop.name
+    }.mkString(", ")
+    val strValues = propertiesWithoutId.map {
+      prop => val v = prop.get(m.asInstanceOf[Object]); prop.encode(v)
+    }.mkString(", ")
 
     new Insert(tableName, strFields, strValues).executeUpdate
   }
 
-  //TODO
-  def update(m: M)={
+  def update(m: M) = {
     val tableName = self.query._from
-
+    val sets = propertiesWithoutId.map {
+      prop => prop.name + " = " + prop.encode(prop.get(m.asInstanceOf[Object]))
+    }.mkString(", ")
+    val criteria = new NormalCriteria(idProperty.property, "=", idProperty.property.get(m.asInstanceOf[Object]))
+    new Update(tableName, sets, Some(criteria)).executeUpdate
   }
 
-  //TODO
-  def delete(m: M)={
+  def delete(m: M) = {
     val tableName = self.query._from
+    val criteria = new NormalCriteria(idProperty.property, "=", idProperty.property.get(m.asInstanceOf[Object]))
+    new Delete(tableName, Some(criteria)).executeUpdate
 
   }
 
@@ -560,7 +595,7 @@ case class Query(val _from: String = null,
       Some("from " + _from),
       _join,
       (if (_where.isEmpty) None else Some("where " + _where.get.toSQL)),
-      (if(_order.isEmpty) None else Some("order by " +  _order.get.toSQL)),
+      (if (_order.isEmpty) None else Some("order by " + _order.get.toSQL)),
       _group,
       _having,
       (if (_limit.isEmpty) None else Some("limit " + _limit.get)),
@@ -609,6 +644,7 @@ trait ModifyBase {
 
   def executeUpdate = {
     val sql = toSQL
+    Logger.debug(sql)
     var result = false
     Repository.default.within {
       conn =>
@@ -630,13 +666,13 @@ trait ModifyBase {
 
 case class Update(val from: String, val sets: String, val criteria: Option[Criteria]) extends ModifyBase {
   override def toSQL = {
-    ("update " + from + " " + sets) + (if (criteria.isEmpty) "" else (" where " + criteria.get.toSQL))
+    ("update " + from + " set " + sets) + (if (criteria.isEmpty) "" else (" where " + criteria.get.toSQL))
   }
 }
 
 case class Delete(val from: String, val criteria: Option[Criteria]) extends ModifyBase {
   override def toSQL = {
-    "delete " + from + (if (criteria.isEmpty) "" else (" where " + criteria.get.toSQL))
+    "delete from " + from + (if (criteria.isEmpty) "" else (" where " + criteria.get.toSQL))
   }
 }
 
@@ -694,6 +730,7 @@ trait UserDef extends TableDef {
   val modelClass = classOf[User]
 
 
+  var id = field(IntType, "id")
   var name = field(StringType, "name")
   var age = field(IntType, "age")
 }
@@ -706,6 +743,8 @@ class User extends Model with UserDef {
 //don't specify vars in the case class.
 case class UserSchema(override val query: Query) extends Schema with UserDef {
   type DAO = UserSchema
+
+  val idProperty = IdProperty(id)
 
   def youngs = {
     where(age < 18)
@@ -803,9 +842,15 @@ object Main {
     }
 
     val u1 = new User
+    u1.id = 11
     u1.name = "ha11"
     u1.age = 33
     User.insert(u1)
+
+    u1.name = "abc"
+    User.update(u1)
+
+    User.delete(u1)
   }
 
 }
