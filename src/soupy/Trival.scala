@@ -289,7 +289,6 @@ trait TableDef {
 }
 
 abstract class PropertiesDef[M](implicit val manifest: Manifest[M]) extends TableDef {
-  self =>
   val modelClass = manifest.erasure
 
   type StringType = StringProperty
@@ -351,7 +350,7 @@ trait AccessorsDef extends TableDef {
 }
 
 trait QueryDelegator[DAO] {
-  self: Schema[_, _] {def copy(query: Query): Any} =>
+  self: Schema[_, _] =>
 
   def from(_from: String): DAO = {
     this.dup(query.from(_from))
@@ -420,10 +419,6 @@ trait QueryDelegator[DAO] {
   }
 
 
-  def dup[DAO](query: Query): DAO = {
-    val ins = self.copy(query)
-    ins.asInstanceOf[DAO]
-  }
 }
 
 //TODO: you need define IdColumn
@@ -454,15 +449,12 @@ trait ModifyDelegator[M] {
     val tableName = self.query._from
     val criteria = new NormalCriteria(idProperty.property, "=", idProperty.property.get(m.asInstanceOf[Object]))
     new Delete(tableName, Some(criteria)).executeUpdate
-
   }
 
 }
 
-abstract class Schema[M, DAO <: Schema[_, _]](override implicit val manifest: Manifest[M], implicit val daoManifest: Manifest[DAO]) extends PropertiesDef[M] with QueryDelegator[DAO] with ModifyDelegator[M] {
-  self: {def copy(query: Query): Any} =>
-
-  val query: Query
+abstract class Schema[M, DAO <: Schema[_, _]](val tableName: String)(override implicit val manifest: Manifest[M], implicit val daoManifest: Manifest[DAO]) extends PropertiesDef[M] with QueryDelegator[DAO] with ModifyDelegator[M] with Cloneable {
+  var query: Query = new Query(_from = tableName)
 
   def build: M = {
     val m = modelClass.newInstance
@@ -505,6 +497,11 @@ abstract class Schema[M, DAO <: Schema[_, _]](override implicit val manifest: Ma
     refineQuery(query).executeQuery(callback)
   }
 
+  def dup[DAO <: Schema[_, _]](query: Query): DAO = {
+    val ins = this.clone.asInstanceOf[DAO]
+    ins.query = query
+    ins
+  }
 }
 
 trait Model extends AccessorsDef
@@ -724,8 +721,7 @@ class User extends Model with UserDef {
 
 }
 
-//don't specify vars in the case class.
-case class UserSchema(override val query: Query) extends Schema[User, UserSchema] with UserDef {
+class UserSchema extends Schema[User, UserSchema]("users") with UserDef {
   val idProperty = IdProperty(id)
 
   def youngs = {
@@ -742,7 +738,7 @@ case class UserSchema(override val query: Query) extends Schema[User, UserSchema
 // cast to object User will cause ClassCastException.
 // sorry for that.
 // any better solution?
-object User extends UserSchema(Query("users"))
+object User extends UserSchema
 
 
 object Main {
