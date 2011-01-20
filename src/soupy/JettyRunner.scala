@@ -9,16 +9,7 @@ abstract class Application {
   lazy val root:String = {
     System.getProperty("user.dir")
   }
-  def db:Map[String,String]
   def routes:Routes
-
-  def getConnection = {
-    Class.forName("com.mysql.jdbc.Driver").newInstance
-    val conn = DriverManager.getConnection("jdbc:mysql:///" + db("database"),
-      db("user"), db("password"))
-
-    conn
-  }
 
   def run={
     JettyRunner.run(this)

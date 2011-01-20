@@ -2,11 +2,14 @@ package soupy.persistence
 
 import java.sql.{DriverManager, Connection, ResultSet, PreparedStatement}
 import java.beans.Introspector
-import reflect.BeanInfo
 import org.apache.commons.logging.LogFactory
+
+package soupy {
 
 package object persistence {
   val logger = LogFactory.getLog("persistence")
+}
+
 }
 
 //----------- SQL Related -------------
@@ -598,7 +601,7 @@ case class Query(val _from: String = null,
         var rs: ResultSet = null
         try {
           val sql = toSQL
-          persistence.logger.debug(sql)
+          soupy.persistence.logger.debug(sql)
           st = conn.prepareStatement(sql)
           rs = st.executeQuery
           while (rs.next) {
@@ -629,7 +632,7 @@ trait ModifyBase {
 
   def executeUpdate = {
     val sql = toSQL
-    persistence.logger.debug(sql)
+    soupy.persistence.logger.debug(sql)
     var result = false
     Repository.default.within {
       conn =>

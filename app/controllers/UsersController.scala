@@ -1,16 +1,17 @@
 package controllers
 
 import soupy.{View, Controller}
+import models._
 
 object UsersController extends Controller {
   def index = {
     val title = "subject"
-    val users = List("sliu", "xliu")
+    val users = User.all
 
     render(new IndexView(title, users), Map("layout" -> "/users/users_layout"))
   }
 
-  class IndexView(val title: String, val users: List[String]) extends View("/users/index") {
+  class IndexView(val title: String, val users: List[User]) extends View("/users/index") {
     override
     def render = {
       select(".title").html(title).attr("style", "color:#FF0000")
@@ -19,12 +20,13 @@ object UsersController extends Controller {
     }
   }
 
-  class ListView(val users: List[String]) extends View("/users/list") {
+  class ListView(val users: List[User]) extends View("/users/list") {
     override
     def render = {
       select(".users ul li").loop(users) {
-        (context, user) =>
-          context.text(user)
+        (li, user) =>
+          li.select("span.name").html(user.name)
+          li.html(user.name + ":" + user.age + "岁")
       }
     }
   }
