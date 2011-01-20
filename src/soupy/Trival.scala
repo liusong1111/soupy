@@ -1,24 +1,14 @@
-package trial
+package persistence
 
 import java.sql.{DriverManager, Connection, ResultSet, PreparedStatement}
 import java.beans.Introspector
 import java.beans.PropertyDescriptor
 import reflect.BeanInfo
 import util.Random
+import org.apache.commons.logging.LogFactory
 
-//------------dirty Logger--------
-object Logger {
-  def debug(msg: String) = {
-    println("--debug--:" + msg)
-  }
-
-  def info(msg: String) = {
-    println("--info--:" + msg)
-  }
-
-  def error(msg: String) = {
-    println("--error--:" + msg)
-  }
+package object persistence {
+  val logger = LogFactory.getLog("persistence")
 }
 
 //----------- SQL Related -------------
@@ -610,7 +600,7 @@ case class Query(val _from: String = null,
         var rs: ResultSet = null
         try {
           val sql = toSQL
-          Logger.debug(sql)
+          persistence.logger.debug(sql)
           st = conn.prepareStatement(sql)
           rs = st.executeQuery
           while (rs.next) {
@@ -641,7 +631,7 @@ trait ModifyBase {
 
   def executeUpdate = {
     val sql = toSQL
-    Logger.debug(sql)
+    persistence.logger.debug(sql)
     var result = false
     Repository.default.within {
       conn =>
@@ -759,7 +749,7 @@ object Main {
 
     val rand = new Random
     // count before create
-    println("count before create:" + User.count)
+    println("-- count before create:" + User.count)
 
     //Create
     var user = new User()
@@ -768,7 +758,7 @@ object Main {
     User.insert(user)
 
     // count after create
-    println("count after create:" + User.count)
+    println("-- count after create:" + User.count)
 
     //Update
     user.age = rand.nextInt(70)
@@ -778,22 +768,22 @@ object Main {
     //User.delete(user)
 
     //Select
-    var users = User.where(User.name like "liu%").where(User.age > 18).all
     println("-- normal query --")
+    var users = User.where(User.name like "liu%").where(User.age > 18).all
     users.foreach {
       user =>
         println("name:" + user.name + " age:" + user.age)
     }
 
-    users = User.youngs.liu.where(User.age > 10).limit(2).all
     println("-- [COOL] use DAO's selector chain --")
+    users = User.youngs.liu.where(User.age > 10).limit(2).all
     users.foreach {
       user =>
         println("name:" + user.name + " age:" + user.age)
     }
 
-    var user1 = User.where(User.id == 1).first
     println("-- first --")
+    var user1 = User.where(User.id == 1).first
     if (user1.isEmpty) {
       println("not found")
     } else {
