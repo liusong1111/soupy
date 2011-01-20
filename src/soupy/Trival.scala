@@ -4,6 +4,7 @@ import java.sql.{DriverManager, Connection, ResultSet, PreparedStatement}
 import java.beans.Introspector
 import java.beans.PropertyDescriptor
 import reflect.BeanInfo
+import util.Random
 
 //------------dirty Logger--------
 object Logger {
@@ -483,6 +484,16 @@ abstract class Schema[M, DAO <: Schema[_, _]](val tableName: String)(override im
     result
   }
 
+  def count: Int = {
+    var result = 0
+    refineQuery(query.select("select count(1)")).executeQuery {
+      rs =>
+        result = rs.getInt(1)
+    }
+
+    result
+  }
+
   implicit def rs2M(rs: ResultSet): M = {
     val m = build
     properties.foreach {
@@ -743,93 +754,108 @@ object User extends UserSchema
 
 object Main {
   def main(args: Array[String]) {
-    val user = new User()
-    // type safe
-    user.name = "sliu"
-    user.age = 32
-    println(user.name + "^" + user.age)
+    //setup real DB connection
+    Repository.setup("default", Map("adapter" -> "mysql", "host" -> "localhost", "database" -> "soupy", "user" -> "root", "password" -> ""))
 
-    //trvial.StringProperty@7b6889
-    println(User.name)
+    val rand = new Random
+    // count before create
+    println("count before create:" + User.count)
+
+    //Create
+    var user = new User()
+    user.name = "sliu"
+    user.age = rand.nextInt(70)
+    User.insert(user)
+
+    // count after create
+    println("count after create:" + User.count)
+
+    //Update
+    user.age = rand.nextInt(70)
+    User.update(user)
+
+    //Delete
+    //User.delete(user)
+
+    //Select
+    var users = User.where(User.name like "liu%").where(User.age > 18).all
+    println("-- normal query --")
+    users.foreach {
+      user =>
+        println("name:" + user.name + " age:" + user.age)
+    }
+
+    users = User.youngs.liu.where(User.age > 10).limit(2).all
+    println("-- [COOL] use DAO's selector chain --")
+    users.foreach {
+      user =>
+        println("name:" + user.name + " age:" + user.age)
+    }
+
+    var user1 = User.where(User.id == 1).first
+    println("-- first --")
+    if (user1.isEmpty) {
+      println("not found")
+    } else {
+      println(user1.get)
+    }
+
+    //More Details on Query -------
 
     // where clause
-    // age>33
+    // age > 33
     println(User.age > 33)
+    // age = 33
     println(User.age == 33)
 
-    // name>'liusong'
+    // name > 'liusong'
     println(User.name > "liusong")
+    // name = 'liusong'
     println(User.name == "liusong")
+    // name like 'liu%'
+    //NOTE: only StringProperty has `like` operator. if you use it for other type, compiler will report an error.
+    println(User.name like "liu%")
 
-    //name='liusong' AND age>28
+    //name = 'liusong' AND age > 28
     println((User.name == "liusong").where(User.age > 28))
+    // same as above
     println(User.name == "liusong" && User.age > 28)
 
-    //NOTE: only User.name has like method, User.age can't(results compiler error).
-    //println(User.age.like("%a"))   // error: value `like` is not a memeber
-
+    // composite `AND` `OR`
     //(name = 'liusong' AND age > 28) OR age < 10 OR name like 'liu%'
     println(User.name == "liusong" && User.age > 28 || User.age < 10 || (User.name like "liu%"))
     //(name = 'liusong' AND (age > 28 OR age < 10)) OR name like 'liu%'
     println(User.name == "liusong" && (User.age > 28 || User.age < 10) || (User.name like "liu%"))
-    // name desc
-    println(User.name.desc)
+    // event with other complex parts
+    println(User.where(User.age > 28).where(User.name like "liu%").order(User.name.desc).group("group by name"))
 
+    //--------- internal --------------
+    // look into properties
+    println("-- look into properties --")
     User.properties.foreach {
       prop =>
         println(prop.name)
     }
 
+    // use singleton object's build
+    // same as `new User`
+    println("-- singleton's `build` --")
     val u = User.build
-    println("^^^^")
     println(u.name + u.age)
 
     //you can use reflect style but type safe like this: User.name.set(m, "sliu")
+    println("-- set/get property using type safe reflection --")
     User.name.set(user, "another name")
     println(User.name.get(user))
 
+    println("-- use Query object directly --")
     //select *
     //from users
     //where name = 'sliu' AND age > 30
     //group by age
-    println("$$$$$$$$$$$$$$$$$$$$$$$$$$$")
     println(new Query("users").where(User.name == "sliu").where(User.age > 30).group("group by age").order(User.age.desc))
-
-    //select *
-    //from users
-    //where age < 18 AND name like '%liu%' AND age > 10
-    //limit 2
-    println(User.youngs.liu.where(User.age > 10).limit(2))
-
-    //setup real DB connection
-    Repository.setup("default", Map("adapter" -> "mysql", "host" -> "localhost", "database" -> "soupy", "user" -> "root", "password" -> ""))
-
-    //iterate the models
-    val youngs = User.youngs
-    youngs.all.foreach {
-      user =>
-        println("name:" + user.name + " age:" + user.age)
-    }
-
-    //check one
-    val liu = youngs.where(User.name like "%liu").first
-    if (liu.isEmpty) {
-      println("not found")
-    } else {
-      println("name:" + liu.get.name + " age:" + liu.get.age)
-    }
-
-    val u1 = new User
-    u1.id = 11
-    u1.name = "ha11"
-    u1.age = 33
-    User.insert(u1)
-
-    u1.name = "abc"
-    User.update(u1)
-
-    User.delete(u1)
   }
+
 
 }
 
