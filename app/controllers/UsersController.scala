@@ -3,7 +3,7 @@ package controllers
 import soupy.{View, Controller}
 import models._
 
-object UsersController extends Controller {
+class UsersController extends Controller {
   def index = {
     val title = "subject"
     val users = User.all

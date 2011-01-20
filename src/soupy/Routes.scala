@@ -3,53 +3,62 @@ package soupy
 import collection.mutable.ListBuffer
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
-class Routes{
-  var routeSet:RouteSet = new RouteSet
+trait Handler {
+  def process(request: HttpServletRequest, response: HttpServletResponse): Unit
+}
 
-  def get(uri:String, options: Map[String, Any] = Map.empty){
-    routeSet.push(uri, "GET", options)
+class Routes {
+  var routeSet: RouteSet = new RouteSet
+
+  def get(uri: String, handler: Handler, options: Map[String, Any] = Map.empty) {
+    routeSet.push(uri, "GET", handler, options)
   }
 
-  def post(uri:String, options: Map[String, Any] = Map.empty){
-    routeSet.push(uri, "POST", options)
+  def post(uri: String, handler: Handler, options: Map[String, Any] = Map.empty) {
+    routeSet.push(uri, "POST", handler, options)
   }
 
-  def recognize(uri:String, method:String):Option[Route]={
+  def recognize(uri: String, method: String): Option[Route] = {
     routeSet.recognize(uri, method)
+  }
+
+  def by[ControllerType <: Controller](actionName: String)(implicit m: Manifest[ControllerType]): Handler = {
+    new ControllerHandler[ControllerType](actionName)
   }
 }
 
-class RouteSet{
-  val routes:ListBuffer[Route] = ListBuffer[Route]()
-  def push(uri:String, method:String, options:Map[String, Any]){
-    val handler = Handler(options)
+class RouteSet {
+  val routes: ListBuffer[Route] = ListBuffer[Route]()
+
+  def push(uri: String, method: String, handler: Handler, options: Map[String, Any]) {
     val route = new Route(uri, method, handler)
     routes += route
   }
 
-  def recognize(uri:String, method:String):Option[Route]={
-    routes.find{
-        case Route(_uri, _method, _) if(_uri == uri && _method == method) => true
-        case _ => false
+  def recognize(uri: String, method: String): Option[Route] = {
+    routes.find {
+      case Route(_uri, _method, _) if (_uri == uri && _method == method) => true
+      case _ => false
     }
   }
 }
 
-object Handler{
-  def apply(options:Map[String, Any])={
-    val handler = new Handler(options("controller").asInstanceOf[Controller], options("action").asInstanceOf[String])
-    handler
+class ControllerHandler[C <: Controller](val action: String)(implicit val m: Manifest[C]) extends Handler {
+  val controllerClass = m.erasure
+  val method = controllerClass.getDeclaredMethods.filter {
+    method => method.getName == action
+  }(0)
+
+  def process(request: HttpServletRequest, response: HttpServletResponse): Unit = {
+    val controller = controllerClass.newInstance.asInstanceOf[C]
+    prepareController(controller, request, response)
+    method.invoke(controller)
+  }
+
+  protected def prepareController(controller: C, request: HttpServletRequest, response: HttpServletResponse) = {
+    controller.request = request
+    controller.response = response
   }
 }
 
-class Handler(val controller:Controller, val action:String){
-  def process(request:HttpServletRequest, response:HttpServletResponse){
-    val method = controller.getClass.getDeclaredMethods.filter{meth => meth.getName == action}(0)
-    val reply = method.invoke(controller)
-    val writer = response.getWriter
-    writer.print(reply)
-    writer.close
-  }
-}
-
-case class Route(val uri:String, val method:String, val handler:Handler)
+case class Route(val uri: String, val method: String, val handler: Handler)

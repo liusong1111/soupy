@@ -20,7 +20,7 @@ object View {
   }
 }
 
-class View(val path: String, var fullHtml:Boolean = false) {
+class View(val path: String, var fullHtml: Boolean = false) {
   lazy val doc: Document = {
     val f = new File(soupy.application.root + "/app/views" + path + ".html")
     Jsoup.parse(f, "UTF-8")
@@ -35,9 +35,9 @@ class View(val path: String, var fullHtml:Boolean = false) {
 
   override def toString = {
     render
-    if(fullHtml){
+    if (fullHtml) {
       doc.toString
-    }else{
+    } else {
       doc.body.children
     }
   }
@@ -58,8 +58,8 @@ class View(val path: String, var fullHtml:Boolean = false) {
   }
 }
 
-class LayoutView(override val path:String) extends View(path, true){
-  def setPart(view:View, partName:String = ".yield")={
+class LayoutView(override val path: String) extends View(path, true) {
+  def setPart(view: View, partName: String = ".yield") = {
     doc.select(partName).renderWidget(view)
   }
 }
@@ -90,8 +90,9 @@ class NodeView(val nodes: Elements) {
     view.render
     nodes.foreach {
       node =>
-        view.doc.body.children.foreach{c =>
-          node.parent.appendChild(c)
+        view.doc.body.children.foreach {
+          c =>
+            node.parent.appendChild(c)
         }
         node.remove
     }

@@ -6,12 +6,13 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import java.sql.DriverManager
 
 abstract class Application {
-  lazy val root:String = {
+  lazy val root: String = {
     System.getProperty("user.dir")
   }
-  def routes:Routes
 
-  def run={
+  def routes: Routes
+
+  def run = {
     JettyRunner.run(this)
   }
 }
