@@ -350,19 +350,8 @@ trait AccessorsDef extends TableDef {
   }
 }
 
-trait Copyable {
-  self: {def copy(query: Query): Any} =>
-
-  type DAO <: Schema[_]
-
-  def dup(query: Query): DAO = {
-    val ins = self.copy(query)
-    ins.asInstanceOf[DAO]
-  }
-}
-
-trait QueryDelegator extends Copyable {
-  self: Schema[_] {def copy(query: Query): Any} =>
+trait QueryDelegator[DAO] {
+  self: Schema[_, _] {def copy(query: Query): Any} =>
 
   def from(_from: String): DAO = {
     this.dup(query.from(_from))
@@ -429,11 +418,17 @@ trait QueryDelegator extends Copyable {
     }
 
   }
+
+
+  def dup[DAO](query: Query): DAO = {
+    val ins = self.copy(query)
+    ins.asInstanceOf[DAO]
+  }
 }
 
 //TODO: you need define IdColumn
 trait ModifyDelegator[M] {
-  self: Schema[_] =>
+  self: Schema[_, _] =>
   def insert(m: M) = {
     val tableName = self.query._from
     val strFields = propertiesWithoutId.map {
@@ -464,10 +459,8 @@ trait ModifyDelegator[M] {
 
 }
 
-abstract class Schema[M](override implicit val manifest: Manifest[M]) extends PropertiesDef[M] with QueryDelegator with ModifyDelegator[M] {
+abstract class Schema[M, DAO <: Schema[_, _]](override implicit val manifest: Manifest[M], implicit val daoManifest: Manifest[DAO]) extends PropertiesDef[M] with QueryDelegator[DAO] with ModifyDelegator[M] {
   self: {def copy(query: Query): Any} =>
-
-  type DAO <: Schema[_]
 
   val query: Query
 
@@ -721,9 +714,6 @@ object Repository {
 //------------------------------
 
 trait UserDef extends TableDef {
-  //still a little verbose.
-
-
   var id = field(IntType, "id")
   var name = field(StringType, "name")
   var age = field(IntType, "age")
@@ -735,9 +725,7 @@ class User extends Model with UserDef {
 }
 
 //don't specify vars in the case class.
-case class UserSchema(override val query: Query) extends Schema[User] with UserDef {
-  type DAO = UserSchema
-
+case class UserSchema(override val query: Query) extends Schema[User, UserSchema] with UserDef {
   val idProperty = IdProperty(id)
 
   def youngs = {
