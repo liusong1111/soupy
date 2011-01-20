@@ -200,9 +200,8 @@ trait TypeBuilder[T] {
   def apply(name: String, index: Int): T
 }
 
-trait PropertyTypeBuilder[T] extends TypeBuilder[T] {
-  type M
-  val modelClass: Class[M]
+abstract class PropertyTypeBuilder[T] extends TypeBuilder[T] {
+
 }
 
 trait ValueTypeBuilder[T] extends TypeBuilder[T] {
@@ -239,7 +238,9 @@ class StringProperty(override val modelClass: Class[_], override val name: Strin
   }
 }
 
-trait StringPropertyBuilder extends PropertyTypeBuilder[StringProperty] {
+class StringPropertyBuilder[M](implicit val manifest: Manifest[M]) extends PropertyTypeBuilder[StringProperty] {
+  val modelClass = manifest.erasure
+
   override def apply(name: String, index: Int): StringProperty = {
     new StringProperty(modelClass, name, index)
   }
@@ -262,7 +263,9 @@ class IntProperty(override val modelClass: Class[_], override val name: String, 
   }
 }
 
-trait IntPropertyBuilder extends PropertyTypeBuilder[IntProperty] {
+class IntPropertyBuilder[M](implicit val manifest: Manifest[M]) extends PropertyTypeBuilder[IntProperty] {
+  val modelClass = manifest.erasure
+
   override def apply(name: String, index: Int): IntProperty = {
     new IntProperty(modelClass, name, index)
   }
@@ -276,9 +279,6 @@ object IntValueBuilder extends ValueTypeBuilder[Int] {
 
 //type definitions
 trait TableDef {
-  type M
-  val modelClass: Class[M]
-
   type StringType
   type IntType
 
@@ -288,20 +288,16 @@ trait TableDef {
   def field[T](builder: TypeBuilder[T], name: String, options: Pair[String, String]*): T
 }
 
-trait PropertiesDef extends TableDef {
+abstract class PropertiesDef[M](implicit val manifest: Manifest[M]) extends TableDef {
   self =>
+  val modelClass = manifest.erasure
+
   type StringType = StringProperty
 
-  lazy val StringType: TypeBuilder[StringProperty] = new StringPropertyBuilder {
-    type M = self.M
-    val modelClass: Class[M] = self.modelClass
-  }
+  lazy val StringType: TypeBuilder[StringProperty] = new StringPropertyBuilder[M]
 
   type IntType = IntProperty
-  lazy val IntType: TypeBuilder[IntProperty] = new IntPropertyBuilder {
-    type M = self.M
-    val modelClass = self.modelClass
-  }
+  lazy val IntType: TypeBuilder[IntProperty] = new IntPropertyBuilder[M]
 
   var properties = List[Property[Any]]()
 
@@ -357,7 +353,7 @@ trait AccessorsDef extends TableDef {
 trait Copyable {
   self: {def copy(query: Query): Any} =>
 
-  type DAO <: Schema
+  type DAO <: Schema[_]
 
   def dup(query: Query): DAO = {
     val ins = self.copy(query)
@@ -366,7 +362,7 @@ trait Copyable {
 }
 
 trait QueryDelegator extends Copyable {
-  self: Schema {def copy(query: Query): Any} =>
+  self: Schema[_] {def copy(query: Query): Any} =>
 
   def from(_from: String): DAO = {
     this.dup(query.from(_from))
@@ -436,8 +432,8 @@ trait QueryDelegator extends Copyable {
 }
 
 //TODO: you need define IdColumn
-trait ModifyDelegator {
-  self: Schema =>
+trait ModifyDelegator[M] {
+  self: Schema[_] =>
   def insert(m: M) = {
     val tableName = self.query._from
     val strFields = propertiesWithoutId.map {
@@ -468,10 +464,10 @@ trait ModifyDelegator {
 
 }
 
-trait Schema extends PropertiesDef with QueryDelegator with ModifyDelegator {
+abstract class Schema[M](override implicit val manifest: Manifest[M]) extends PropertiesDef[M] with QueryDelegator with ModifyDelegator[M] {
   self: {def copy(query: Query): Any} =>
 
-  type DAO <: Schema
+  type DAO <: Schema[_]
 
   val query: Query
 
@@ -726,8 +722,6 @@ object Repository {
 
 trait UserDef extends TableDef {
   //still a little verbose.
-  type M = User
-  val modelClass = classOf[User]
 
 
   var id = field(IntType, "id")
@@ -741,7 +735,7 @@ class User extends Model with UserDef {
 }
 
 //don't specify vars in the case class.
-case class UserSchema(override val query: Query) extends Schema with UserDef {
+case class UserSchema(override val query: Query) extends Schema[User] with UserDef {
   type DAO = UserSchema
 
   val idProperty = IdProperty(id)
