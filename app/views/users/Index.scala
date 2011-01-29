@@ -7,19 +7,22 @@ class Index extends views.BaseView {
     <div>
       <script src="/javascripts/jquery-1.4.4.js"></script>
       <script src="/javascripts/jquery-ui-1.8.9.custom.min.js"></script>
-      {
-       <aa></aa>
-      }
+      <script src="/javascripts/widget.js"></script>
+      <link rel="stylesheet" type="text/css" href="/stylesheets/widget.css" />
+
       {(new ExchangeView).render}
 
       {(new FeixinGroupView).render}
+
+      <div class="droppable" style="width:500px;height:500px;background-color:#ff3">
+      </div>
     </div>
   }
 }
 
 abstract class WidgetView extends views.BaseView {
   def render = {
-    <div class="widget">
+    <div class="widget draggable">
       <h3>{title}</h3>
       <div>
         {body}

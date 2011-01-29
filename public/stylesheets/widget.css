@@ -1,0 +1,17 @@
+*{
+    padding:0;
+    margin:0;
+}
+.widget{
+    border:1px solid #ccc;
+    border-radius:4px;
+    width: 200px;
+    background-color: #eee;
+    margin: 10px;
+}
+
+.widget h3{
+    background-color: #0cc;
+    font-weight: bold;
+    color: #366;
+}
