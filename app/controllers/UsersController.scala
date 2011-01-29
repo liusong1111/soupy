@@ -2,13 +2,20 @@ package controllers
 
 import soupy.{View, Controller}
 import models._
+import views.users.Index
 
 class UsersController extends Controller {
   def index = {
     val title = "subject"
     val users = User.all
 
-    render(new IndexView(title, users), Map("layout" -> "/users/users_layout"))
+//    render(new IndexView(title, users), Map("layout" -> "/users/users_layout"))
+    new Index().output(out)
+//    out.println("KKK")
+  }
+
+  def show = {
+    forward("/users/index.jsp")
   }
 
   class IndexView(val title: String, val users: List[User]) extends View("/users/index") {

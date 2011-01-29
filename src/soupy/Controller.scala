@@ -5,6 +5,7 @@ import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
 abstract class Controller {
   var request: HttpServletRequest = null
   var response: HttpServletResponse = null
+  lazy val out = response.getWriter
 
   def render(view: View, options: Map[String, Any]): Unit = {
     var result = view
@@ -18,9 +19,12 @@ abstract class Controller {
     //    println(result)
     //    result.toString
 
-    val out = response.getWriter
     out.print(result.toString)
     out.close
+  }
+
+  def forward(jspPath:String) = {
+    request.getRequestDispatcher(jspPath).forward(request, response)
   }
 
   def params(key: String): Any = {
