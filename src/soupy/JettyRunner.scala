@@ -4,6 +4,8 @@ import org.eclipse.jetty.server.Server
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse, HttpServlet}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import java.sql.DriverManager
+import io.Source
+import java.nio.channels.Channels
 
 abstract class Application {
   lazy val root: String = {
@@ -23,10 +25,25 @@ class DispatcherServlet(application: Application) extends HttpServlet {
     //    val writer = response.getWriter
     //    writer.println("OK--11!")
     //    writer.close
-    val route = application.routes.recognize(request.getPathInfo, request.getMethod).orNull
+    val pathInfo = request.getPathInfo
+    val route = application.routes.recognize(pathInfo, request.getMethod).orNull
     if (route eq null) {
-      throw new Exception("No routes found! [uri]" + request.getPathInfo + " [method]" + request.getMethod)
+      if(pathInfo.startsWith("/javascripts") || pathInfo.startsWith("/stylesheets") || pathInfo.startsWith("/images")){
+        val f = "d:/test/soupy/public" + pathInfo
+        var reader = new java.io.FileInputStream(f)
+        var out = response.getOutputStream
+        var bytes = new Array[Byte](1024)
+        var len = reader.read(bytes)
+        while(len > 0){
+          out.write(bytes,0, len)
+          len = reader.read(bytes)
+        }
+        return
+      }else{
+        throw new Exception("No routes found! [uri]" + request.getPathInfo + " [method]" + request.getMethod)
+      }
     }
+    response.setCharacterEncoding("utf8")
     route.handler.process(request, response)
   }
 }

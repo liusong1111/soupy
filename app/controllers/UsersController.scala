@@ -10,7 +10,9 @@ class UsersController extends Controller {
     val users = User.all
 
 //    render(new IndexView(title, users), Map("layout" -> "/users/users_layout"))
-    new Index().output(out)
+//    new Index().output(out)
+    println((new Index).render)
+    out.print((new Index).render)
 //    out.println("KKK")
   }
 

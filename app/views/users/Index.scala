@@ -4,16 +4,15 @@ import xml.Elem
 
 class Index extends views.BaseView {
   def render = {
-
-
     <div>
-      <script src=""></script>
+      <script src="/javascripts/jquery-1.4.4.js"></script>
+      <script src="/javascripts/jquery-ui-1.8.9.custom.min.js"></script>
       {
        <aa></aa>
       }
-      {new ExchangeView}
+      {(new ExchangeView).render}
 
-      {new FeixinGroupView}
+      {(new FeixinGroupView).render}
     </div>
   }
 }
