@@ -1,0 +1,38 @@
+.searchResultPanel{
+    margin: 6px;
+    padding: 0 6px 6px 6px;
+    border-radius: 6px 6px;
+    width: 700px;
+    background-color: #eee;
+}
+
+.searchResultPanel h3{
+    background: #0cc;
+    font-weight: bold;
+}
+
+.searchResultPanel .searchResultItem{
+    margin: 6px;
+    padding: 6px 4px;
+    border-bottom: 1px solid #ccc;
+}
+
+.searchResultPanel .searchResultItem h4{
+    color: #0cc;
+    font-size: 110%;
+    padding:4px 0;
+}
+
+.searchResultPanel .searchResultItem .content{
+    font-size: 90%;
+}
+
+.searchResultPanel .searchResultItem .date{
+    color: #999;
+    font-size: 80%;
+}
+
+.specialItem{
+    padding: 4px 2px;
+    border-bottom: 1px solid #ccc;
+}

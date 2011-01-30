@@ -27,7 +27,7 @@ abstract class Controller {
     request.getRequestDispatcher(jspPath).forward(request, response)
   }
 
-  def params(key: String): Any = {
+  def params(key: String): String = {
     request.getParameter(key)
   }
 
