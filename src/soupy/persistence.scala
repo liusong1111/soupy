@@ -1,8 +1,8 @@
 package soupy.persistence
 
-import java.sql.{DriverManager, Connection, ResultSet, PreparedStatement}
 import java.beans.Introspector
 import org.apache.commons.logging.LogFactory
+import java.sql._
 
 package soupy {
 
@@ -425,7 +425,11 @@ trait ModifyDelegator[M] {
       prop => val v = prop.get(m.asInstanceOf[Object]); prop.encode(v)
     }.mkString(", ")
 
-    new Insert(tableName, strFields, strValues).executeUpdate
+    var insert = new Insert(tableName, strFields, strValues)
+    insert.executeUpdate
+    if (idProperty.isInstanceOf[AutoIncrementIdProperty]) {
+      idProperty.property.set(m.asInstanceOf[Object], insert.generatedId)
+    }
   }
 
   def update(m: M) = {
@@ -665,8 +669,37 @@ case class Delete(val from: String, val criteria: Option[Criteria]) extends Modi
 }
 
 case class Insert(val from: String, val fields: String, val values: String) extends ModifyBase {
+  var generatedId: Long = -1L
+
   override def toSQL = {
     "insert into " + from + "(" + fields + ") values(" + values + ")"
+  }
+
+  override def executeUpdate = {
+    val sql = toSQL
+    soupy.persistence.logger.debug(sql)
+    var result = false
+    Repository.default.within {
+      conn =>
+        var st: PreparedStatement = null
+        try {
+          st = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)
+          result = st.executeUpdate != 0
+          val ret = st.getGeneratedKeys
+          if (ret.next) {
+            generatedId = ret.getLong(1)
+          } else {
+            result = false
+          }
+        } finally {
+          try {
+            st.close
+          } catch {
+            case _ => None
+          }
+        }
+    }
+    result
   }
 }
 
