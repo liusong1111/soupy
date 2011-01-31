@@ -16,7 +16,7 @@ class User extends Model with UserDef {
 }
 
 class UserSchema extends Schema[User, UserSchema]("users") with UserDef {
-  val idProperty = IdProperty(id)
+  val idProperty = IdProperty(id, "autoIncrement")
 
   def byName(name: String) = where(User.name == name)
 
@@ -31,6 +31,22 @@ class UserSchema extends Schema[User, UserSchema]("users") with UserDef {
 
 object User extends UserSchema
 
+object M1{
+  def main(args: Array[String]) {
+    Repository.setup("default", Map("adapter" -> "mysql", "host" -> "localhost", "database" -> "soupy", "user" -> "root", "password" -> ""))
+    var u = new User
+    u.name = "ttaa"
+    User.insert(u)
+    println(u.id)
+
+    u.age = 45
+    User.update(u)
+
+    User.delete(u)
+
+//    User.delete(u)
+  }
+}
 object Main {
   def main(args: Array[String]) {
     //setup real DB connection
