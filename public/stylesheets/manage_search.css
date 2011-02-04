@@ -1,0 +1,42 @@
+.modules {
+    border-bottom: 1px solid #ccc;
+    margin: 0 4px;
+    overflow: visible;
+}
+
+.modules img {
+    margin-right: 12px;
+}
+
+.modules .title{
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.modules .description{
+    display: block;
+    padding: 4px;
+    margin: 4px;
+    color: #666;
+    font-size: 90%;
+}
+
+.modules .previewImg {
+    width: 200px;
+    height: 200px;
+}
+
+.modules .icon {
+    width: 48px;
+    height: 48px;
+    float: left;
+}
+
+.modules{
+    margin: 4px;
+    border-collapse: collapse;
+}
+
+.modules tr{
+    border-bottom: 1px;
+}
