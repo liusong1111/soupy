@@ -1,12 +1,12 @@
 package demo
 
 import controllers._
-import soupy.Routes
+import soupy.{App, Routes}
 
 object MyRoutes extends Routes{
-  get("/users", by[UsersController]("index"))
-  get("/users/1", by[UsersController]("show"))
-  get("/search", by[SearchPortalController]("index"))
+  get("/users", App[UsersController]("index"))
+  get("/users/1", App[UsersController]("show"))
+  get("/search", App[SearchPortalController]("index"))
 
-  get("/admin/manage_search", by[SearchManageController]("index"))
+  get("/admin/manage_search", App[SearchManageController]("index"))
 }
